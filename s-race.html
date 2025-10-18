@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Stunt Racer — Бесконечные уровни</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    :root{
+      --ui: rgba(0,0,0,.5);
+      --ui2: rgba(0,0,0,.35);
+      --text: #fff;
+      --accent: #25d366;
+      --accent2: #ffd166;
+      --danger: #ff4757;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:#0b1020; overflow:hidden; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color:var(--text); }
+    canvas { display:block; width:100vw; height:100vh; background: linear-gradient(#0a1b3f, #0c224e 40%, #1d2a52 100%); }
+    #hud {
+      position:fixed; top:10px; left:10px; right:10px; display:flex; gap:10px; align-items:center; z-index:5; pointer-events:none;
+    }
+    .panel {
+      background: var(--ui);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 600;
+      font-size: 14px;
+      display:flex; gap:12px; align-items:center;
+    }
+    .panel b { color:#e6f1ff; }
+    #rightHUD { margin-left:auto; }
+    #overlay {
+      position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      background: radial-gradient(1200px 600px at 50% 0%, rgba(255,255,255,.05), rgba(0,0,0,.45) 50%, rgba(0,0,0,.6) 100%);
+      z-index:10;
+      text-align:center;
+      padding:24px;
+    }
+    #overlay.hidden { display:none; }
+    .title { font-size: 32px; font-weight:800; letter-spacing:.3px; margin-bottom:8px; }
+    .subtitle { opacity:.9; margin-bottom:20px; }
+    .big { font-size: 18px; line-height:1.6; white-space:pre-line; }
+    .kbd { display:inline-block; padding:2px 6px; background:#111827; border:1px solid #374151; border-radius:6px; font-weight:700; }
+    .btn {
+      pointer-events:auto; cursor:pointer; margin-top:18px;
+      background: linear-gradient(180deg, #2dd4bf, #1db5a2);
+      color:#04131a; font-weight:900; border:none; border-radius:10px; padding:12px 18px; font-size:16px; box-shadow: 0 6px 16px rgba(0,0,0,.25);
+    }
+    .btn:active { transform: translateY(1px) scale(.99); }
+    #mobileControls {
+      position:fixed; inset:auto 0 12px 0; display:flex; justify-content:center; gap:12px; z-index:6;
+      pointer-events:none;
+    }
+    .mBtn {
+      pointer-events:auto;
+      width:68px; height:68px; border-radius:50%;
+      background: var(--ui2);
+      border:1px solid rgba(255,255,255,.12);
+      color:#e9f1ff; font-size:26px; display:flex; align-items:center; justify-content:center;
+      backdrop-filter: blur(8px);
+      user-select:none; -webkit-user-select:none;
+      touch-action: none;
+    }
+    .mWide {
+      width:120px; border-radius:16px; font-weight:800; font-size:18px;
+    }
+    .hint {
+      position:fixed; bottom: 90px; left:10px; right:10px; text-align:center; color:#cfe7ff; opacity:.8; font-size:13px; z-index:5;
+    }
+    .toast {
+      position:absolute; left:50%; transform:translateX(-50%);
+      color:#fff; font-weight:900; text-shadow: 0 2px 8px rgba(0,0,0,.5);
+      opacity:0; animation: toast 1.4s ease-out forwards;
+      pointer-events:none; z-index:8;
+    }
+    @keyframes toast {
+      0% { opacity:0; transform:translate(-50%, 10px); }
+      10% { opacity:1; transform:translate(-50%, 0px); }
+      80% { opacity:1; transform:translate(-50%, -24px); }
+      100% { opacity:0; transform:translate(-50%, -40px); }
+    }
+    .hs { color:#ffd166; }
+    .ok { color:#86efac; }
+    .bad { color:#ff6b6b; }
+    .muted { color:#cbd5e1; opacity:.8; }
+    .chip { background: rgba(255,255,255,.08); padding:2px 8px; border-radius:999px; font-weight:700; border:1px solid rgba(255,255,255,.12) }
+    @media (max-width: 820px) {
+      #rightHUD { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="panel" id="leftHUD">
+      <div>Уровень: <b id="lvl">1</b></div>
+      <div>Очки: <b id="score">0</b></div>
+      <div>Дистанция: <b id="dist">0 м</b></div>
+      <div>Скорость: <b id="spd">0 км/ч</b></div>
+      <div class="chip">Рекорд: <span id="hi">0</span></div>
+    </div>
+    <div class="panel" id="rightHUD">
+      <div>Управление: <span class="kbd">↑</span> газ, <span class="kbd">←</span>/<span class="kbd">→</span> наклон, <span class="kbd">↓</span> тормоз, <span class="kbd">P</span> пауза</div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="title">STUNT RACER ∞</div>
+    <div class="subtitle">Делай трюки, держи темп и проходи уровни — их бесконечно!</div>
+    <div class="big">
+      Управление: <span class="kbd">↑</span> газ, <span class="kbd">←</span>/<span class="kbd">→</span> наклон, <span class="kbd">↓</span> тормоз, <span class="kbd">P</span> пауза, <span class="kbd">R</span> рестарт.
+      Трюки: делай сальто в воздухе и получай очки. Идеальная посадка — бонус!
+    </div>
+    <button class="btn" id="btnStart">Играть</button>
+  </div>
+
+  <div class="hint muted">Поддерживаются сенсорные кнопки снизу экрана</div>
+
+  <div id="mobileControls">
+    <div class="mBtn" id="btnLeft" title="Наклон влево">⟲</div>
+    <div class="mBtn mWide" id="btnGas" title="Газ">⚡</div>
+    <div class="mBtn" id="btnRight" title="Наклон вправо">⟳</div>
+  </div>
+
+  <script>
+  (() => {
+    // Canvas setup with HiDPI scaling
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let DPR = Math.min(window.devicePixelRatio || 1, 2);
+    let W = 0, H = 0;
+
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = Math.floor(window.innerWidth * DPR);
+      H = Math.floor(window.innerHeight * DPR);
+      canvas.width = W;
+      canvas.height = H;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+    }
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+
+    // UI elements
+    const elLvl = document.getElementById('lvl');
+    const elScore = document.getElementById('score');
+    const elDist = document.getElementById('dist');
+    const elSpd = document.getElementById('spd');
+    const elHi = document.getElementById('hi');
+    const overlay = document.getElementById('overlay');
+    const btnStart = document.getElementById('btnStart');
+
+    // High score
+    let HI = +(localStorage.getItem('stunt_hi') || 0);
+    elHi.textContent = HI.toLocaleString('ru-RU');
+
+    // Helpers
+    const TAU = Math.PI * 2;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const lerp = (a,b,t) => a + (b - a) * t;
+    const smooth = t => t * t * (3 - 2 * t); // smoothstep
+    const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+    const angNorm = a => {
+      while (a > Math.PI) a -= TAU;
+      while (a < -Math.PI) a += TAU;
+      return a;
+    };
+    function lerpAngle(a, b, t) {
+      let d = angNorm(b - a);
+      return a + d * t;
+    }
+    const rand = (a=0,b=1) => Math.random()*(b-a)+a;
+
+    // Deterministic hash-based value noise [-1..1]
+    const NOISE_SEED = (Math.random()*1e9)|0;
+    function hash(n) {
+      n = (n << 13) ^ n;
+      return 1.0 - ((n*(n*n*15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0;
+    }
+    function valueNoise(x) {
+      const xi = Math.floor(x);
+      const t = x - xi;
+      const v0 = hash(xi + NOISE_SEED);
+      const v1 = hash(xi + 1 + NOISE_SEED);
+      return lerp(v0, v1, smooth(t));
+    }
+
+    // Input
+    const Input = { left:false, right:false, up:false, down:false, any:false };
+    const keyMap = {
+      ArrowLeft: 'left', KeyA: 'left',
+      ArrowRight: 'right', KeyD: 'right',
+      ArrowUp: 'up', KeyW: 'up',
+      ArrowDown: 'down', KeyS: 'down',
+      Space: 'up',
+    };
+    let wantRestart = false;
+    let wantPauseToggle = false;
+
+    function setKey(k, down) {
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (keyMap[k] !== undefined) {
+        const name = keyMap[k];
+        Input[name] = down;
+        if (down) Input.any = true;
+      }
+      if (k === 'KeyR' && down) wantRestart = true;
+      if ((k === 'KeyP' || k === 'Escape') && down) wantPauseToggle = true;
+    }
+    document.addEventListener('keydown', e => {
+      if (keyMap[e.code] || e.code === 'KeyR' || e.code === 'KeyP' || e.code === 'Escape') e.preventDefault();
+      setKey(e.code, true);
+    });
+    document.addEventListener('keyup', e => setKey(e.code, false));
+
+    // Mobile controls
+    const btnLeft = document.getElementById('btnLeft');
+    const btnRight = document.getElementById('btnRight');
+    const btnGas = document.getElementById('btnGas');
+    function bindBtn(btn, prop) {
+      const on = e => { e.preventDefault(); Input[prop] = true; Input.any = true; btn.classList.add('active'); };
+      const off = e => { e.preventDefault(); Input[prop] = false; btn.classList.remove('active'); };
+      btn.addEventListener('pointerdown', on);
+      btn.addEventListener('pointerup', off);
+      btn.addEventListener('pointercancel', off);
+      btn.addEventListener('pointerleave', off);
+    }
+    bindBtn(btnLeft, 'left');
+    bindBtn(btnRight, 'right');
+    bindBtn(btnGas, 'up');
+
+    // Particles for dust
+    const particles = [];
+    function spawnDust(x, y, color='#ffffff', scale=1) {
+      particles.push({
+        x, y, vx: rand(-30, 30), vy: rand(-10, -60),
+        life: rand(0.3, 0.7), t: 0, r: rand(2, 4)*scale, color
+      });
+    }
+
+    // Floating toasts (popups for flips, etc.)
+    function toast(text, colorClass='hs') {
+      const el = document.createElement('div');
+      el.className = `toast ${colorClass}`;
+      el.style.top = (window.innerHeight * 0.3) + 'px';
+      el.style.fontSize = '22px';
+      el.textContent = text;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1500);
+    }
+
+    // Terrain generation: value noise + occasional bumps ("features")
+    const features = []; // { x, w, a } center, width, amplitude
+    let lastFeatureX = 0;
+    function addFeaturesUntil(maxX, level) {
+      const desiredStep = 900 + Math.max(0, 600 - level*50);
+      while (lastFeatureX < maxX + 2000) {
+        lastFeatureX += rand(desiredStep*0.6, desiredStep*1.4);
+        const w = rand(200, 420) * (1 + Math.min(1, level*0.05));
+        const a = rand(-80, 140) * (1 + level*0.08); // positive = бугор/трамплин, отриц = ямка
+        features.push({ x:lastFeatureX, w, a });
+      }
+      // Trim old
+      const minX = camera.x - 2000;
+      while (features.length && features[0].x + features[0].w < minX) features.shift();
+    }
+
+    // Terrain params
+    const terrain = {
+      base: () => H * 0.7,
+      h(x, level=1) {
+        // Noise-based baseline
+        const f1 = 0.0012 * (1 + (level-1)*0.06);
+        const f2 = 0.0060 * (1 + (level-1)*0.1);
+        const A1 = 60 * (1 + (level-1)*0.15);
+        const A2 = 18 * (1 + (level-1)*0.2);
+        const n = valueNoise(x*f1)*A1 + valueNoise(x*f2)*A2;
+        // Local features
+        let bump = 0;
+        for (let i=0;i<features.length;i++){
+          const ft = features[i];
+          const dx = (x - ft.x) / ft.w;
+          if (Math.abs(dx) <= 1) {
+            const shape = (1 - dx*dx); // parabola
+            bump += ft.a * shape * shape; // smoother
+          }
+        }
+        return clamp(this.base() + n - bump, H*0.25, H*0.93);
+      },
+      slope(x, level=1) {
+        const e = 1.5; // sample step px
+        const y2 = this.h(x+e, level);
+        const y1 = this.h(x-e, level);
+        return (y2 - y1) / (2*e); // dy/dx (y downwards)
+      },
+      angle(x, level=1) {
+        return Math.atan(this.slope(x, level)); // radians
+      }
+    };
+
+    // Camera
+    const camera = { x:0, y:0, smooth:0.08 };
+
+    // Car physics
+    const car = {
+      x: 0, y: 0, vx: 0, vy: 0,
+      angle: 0, omega: 0,
+      R: 18, // collision radius / wheel radius proxy
+      airborne: false,
+      airTime: 0,
+      rotAccum: 0, // accumulated rotation in air
+      lastAngle: 0,
+      lastGroundAngle: 0,
+      dead: false,
+    };
+
+    // Game state
+    let level = 1;
+    let score = 0;
+    let distanceMax = 0; // best forward distance
+    let started = false;
+    let paused = false;
+
+    // Difficulty and physics params per level
+    function paramsForLevel(lvl) {
+      return {
+        engineGround: 1400 * (1 + (lvl-1)*0.06),
+        engineAir: 400 * (1 + (lvl-1)*0.03),
+        maxSpeed: 900 * (1 + (lvl-1)*0.04),
+        friction: 2.6,               // along-slope damping
+        rotAccel: 6.5,               // rad/s^2 in air
+        rotDampAir: 0.995,
+        rotDampGround: 0.8,
+        alignStrength: 10,           // ground angle align speed
+        gravity: 1800,
+        levelLen: 4200,              // px per level
+        perfectThresh: 12 * Math.PI/180, // 12 degrees
+      };
+    }
+
+    // Initialize
+    function reset(hard=true) {
+      const p = paramsForLevel(1);
+      car.x = 0;
+      car.y = terrain.h(0, 1) - car.R - 1;
+      car.vx = 240; // небольшой стартовый толчок
+      car.vy = 0;
+      car.angle = terrain.angle(0, 1);
+      car.omega = 0;
+      car.airborne = false;
+      car.airTime = 0;
+      car.rotAccum = 0;
+      car.dead = false;
+
+      camera.x = -100;
+      camera.y = car.y - H*0.6;
+
+      level = 1;
+      score = 0;
+      distanceMax = 0;
+      features.length = 0;
+      lastFeatureX = -1000;
+      addFeaturesUntil(3000, level);
+
+      if (hard) {
+        started = false;
+        paused = false;
+      }
+      updateHUD();
+    }
+
+    // HUD update
+    function updateHUD() {
+      elLvl.textContent = level.toString();
+      elScore.textContent = Math.round(score).toLocaleString('ru-RU');
+      elDist.textContent = Math.round(distanceMax/10).toLocaleString('ru-RU') + ' м';
+      const kmh = Math.abs(car.vx) * 3.6 / 100; // px/s -> rough km/h assuming 100 px ≈ 1 м
+      elSpd.textContent = Math.round(kmh).toString() + ' км/ч';
+      elHi.textContent = Math.max(HI, Math.round(score)).toLocaleString('ru-RU');
+    }
+
+    // Start/reset UI
+    btnStart.addEventListener('click', () => {
+      started = true;
+      overlay.classList.add('hidden');
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && started) paused = true;
+    });
+
+    // Game loop
+    let lastT = performance.now();
+    function loop(now) {
+      const rawDt = Math.min(1/30, (now - lastT)/1000); // clamp to avoid big jumps
+      lastT = now;
+      const steps = Math.max(1, Math.round(rawDt * 60)); // substeps for stability
+      const dt = rawDt / steps;
+
+      if (started && !paused && !car.dead) {
+        for (let i=0; i<steps; i++) step(dt);
+      }
+
+      render();
+
+      // overlay controls
+      if (wantRestart) {
+        wantRestart = false;
+        reset(false);
+        started = true;
+        overlay.classList.add('hidden');
+      }
+      if (wantPauseToggle && started && !car.dead) {
+        wantPauseToggle = false;
+        paused = !paused;
+      }
+      requestAnimationFrame(loop);
+    }
+
+    // Physics step
+    function step(dt) {
+      const p = paramsForLevel(level);
+
+      // Level progression
+      const newLevel = Math.max(1, Math.floor(car.x / p.levelLen) + 1);
+      if (newLevel !== level) {
+        level = newLevel;
+        toast('Новый уровень: ' + level, 'ok');
+      }
+      addFeaturesUntil(car.x + W*2, level);
+
+      // Input
+      const throttle = Input.up ? 1 : 0;
+      const brake = Input.down ? 1 : 0;
+      const turn = (Input.right?1:0) - (Input.left?1:0);
+
+      // Predict terrain at current and next pos
+      const groundY = terrain.h(car.x, level);
+      const slopeAng = terrain.angle(car.x, level);
+
+      // Detach logic uses predicted next position
+      // Update velocities based on state
+      if (!car.airborne) {
+        // Rebuild along-slope velocity component
+        let vt = car.vx * Math.cos(slopeAng) + car.vy * Math.sin(slopeAng);
+
+        // Engine + brake along slope
+        vt += (throttle - brake) * p.engineGround * dt;
+
+        // Friction
+        vt *= (1 - p.friction * dt);
+
+        // Clamp speed
+        vt = clamp(vt, -p.maxSpeed, p.maxSpeed);
+
+        // Reconstruct world velocities along slope
+        car.vx = vt * Math.cos(slopeAng);
+        car.vy = vt * Math.sin(slopeAng);
+
+        // Slight lean control on ground (just visuals)
+        const targetAngle = slopeAng + turn * 0.08;
+        car.angle = lerpAngle(car.angle, targetAngle, clamp(p.alignStrength * dt, 0, 1));
+        car.omega *= p.rotDampGround;
+
+        // Integrate position freely to test detachment
+        const nx = car.x + car.vx * dt;
+        const ny = car.y + car.vy * dt;
+        const nGroundY = terrain.h(nx, level);
+
+        if (ny + car.R < nGroundY - 0.5) {
+          // Leave ground: becomes airborne
+          car.airborne = true;
+          car.airTime = 0;
+          car.rotAccum = 0;
+          car.lastAngle = car.angle;
+          // keep proposed position
+          car.x = nx;
+          car.y = ny;
+          // Small initial angular kick from slope curvature
+          car.omega += angNorm(car.angle - slopeAng) * 0.1;
+        } else {
+          // Stay on ground: clamp y to ground and zero normal velocity
+          car.x = nx;
+          car.y = nGroundY - car.R;
+          car.vy = 0;
+
+          // Dust when throttle on ground
+          if (Math.abs(vt) > 40 && throttle > 0 && Math.random() < 0.4) {
+            const cx = car.x - Math.cos(slopeAng) * 20 + rand(-8,8);
+            const cy = terrain.h(car.x, level) + rand(-2,2);
+            spawnDust(cx, cy, '#d7eaff', 1);
+          }
+        }
+      } else {
+        // In air
+        car.vy += p.gravity * dt;
+        // Air thrust mostly along x
+        car.vx += (throttle - brake) * p.engineAir * dt;
+
+        // Air rotation control
+        car.omega += turn * p.rotAccel * dt;
+        car.omega *= p.rotDampAir;
+        car.angle = angNorm(car.angle + car.omega * dt);
+
+        // Accumulate rotation for tricks
+        const dA = angNorm(car.angle - car.lastAngle);
+        car.rotAccum += dA;
+        car.lastAngle = car.angle;
+
+        // Integrate position
+        const nx = car.x + car.vx * dt;
+        const ny = car.y + car.vy * dt;
+
+        // Check landing
+        const nGroundY = terrain.h(nx, level);
+        const nSlopeAng = terrain.angle(nx, level);
+
+        if (ny + car.R >= nGroundY) {
+          // Landed
+          car.airborne = false;
+          // Impact adjust
+          car.x = nx;
+          car.y = nGroundY - car.R;
+
+          // Evaluate landing quality and crash
+          const rel = angNorm(car.angle - nSlopeAng);
+          const hardImpact = car.vy > 900; // threshold
+          const crash = Math.abs(rel) > (Math.PI * 0.55) || hardImpact;
+
+          // Calculate tricks
+          const flips = Math.floor(Math.abs(car.rotAccum) / TAU + 0.0001);
+          if (!crash) {
+            if (flips > 0) {
+              const base = 180;
+              const bonus = base * flips * (1 + (level-1)*0.15);
+              score += bonus;
+              toast((car.rotAccum > 0 ? 'Backflip' : 'Frontflip') + (flips>1?` x${flips}`:'' ) + ` +${Math.round(bonus)}`, 'hs');
+            }
+            // Perfect landing bonus
+            const pth = paramsForLevel(level).perfectThresh;
+            if (Math.abs(rel) < pth) {
+              const bonus = 80 * (1 + (level-1)*0.1);
+              score += bonus;
+              toast('Идеальная посадка +' + Math.round(bonus), 'ok');
+            }
+            // Align to slope on safe landing
+            car.angle = nSlopeAng;
+            car.omega = 0;
+            // Kill vertical speed
+            car.vy = 0;
+          } else {
+            // Crash
+            car.dead = true;
+            toast('КРАШ!', 'bad');
+            setTimeout(() => {
+              overlay.classList.remove('hidden');
+              overlay.querySelector('.title').textContent = 'Ты разбился 💥';
+              const ss = Math.round(score);
+              if (ss > HI) {
+                HI = ss;
+                localStorage.setItem('stunt_hi', String(HI));
+              }
+              overlay.querySelector('.subtitle').textContent = `Очки: ${ss.toLocaleString('ru-RU')} • Уровень: ${level}`;
+              overlay.querySelector('.big').innerHTML =
+                `Нажми <span class="kbd">R</span> для рестарта или кнопку ниже.\nТрюки дают очки, аккуратнее с посадкой!`;
+              btnStart.textContent = 'Играть снова';
+            }, 60);
+          }
+          // Distance / score continue on landing if not dead
+          if (!car.dead) {
+            // small forward boost on successful landing from airtime
+            if (flips > 0) {
+              const boost = Math.min(220 + flips*90, 500);
+              const dir = Math.sign(car.vx) || 1;
+              car.vx += dir * boost;
+            }
+          }
+        } else {
+          // Stay in air
+          car.x = nx;
+          car.y = ny;
+          car.airTime += dt;
+          // airtime passive score
+          score += 10 * dt * (1 + (level-1)*0.2);
+        }
+      }
+
+      // Passive distance score
+      const dx = Math.max(0, car.x - distanceMax);
+      if (dx > 0) {
+        distanceMax = car.x;
+        score += dx * 0.05 * (1 + (level-1)*0.05); // distance points scaled
+      }
+
+      // Update camera
+      const targetCamX = car.x - (W / DPR) * 0.35;
+      const targetCamY = car.y - (H / DPR) * 0.6;
+      camera.x = lerp(camera.x, targetCamX, clamp(camera.smooth * (car.airborne ? 0.7:1.0), 0, 1));
+      camera.y = lerp(camera.y, targetCamY, clamp(camera.smooth * 1.0, 0, 1));
+
+      // Update particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const ppp = particles[i];
+        ppp.t += dt;
+        ppp.vx *= 0.98;
+        ppp.vy += 900 * dt;
+        ppp.x += ppp.vx * dt;
+        ppp.y += ppp.vy * dt;
+        if (ppp.t >= ppp.life) particles.splice(i, 1);
+      }
+
+      // Update HUD
+      updateHUD();
+    }
+
+    // Rendering
+    function render() {
+      // Clear
+      ctx.clearRect(0, 0, W, H);
+
+      // Sky gradient (already in CSS background) + stars/mountains parallax
+      drawParallax();
+
+      // Terrain
+      drawTerrain();
+
+      // Car
+      drawCar();
+
+      // Particles
+      drawParticles();
+
+      // Pause overlay hint
+      if (paused && started && !car.dead) {
+        drawCenteredText('Пауза', W/2, H*0.36, 36, '#ffffff');
+        drawCenteredText('Нажми P для продолжения', W/2, H*0.36 + 40, 18, 'rgba(255,255,255,.8)');
+      }
+
+      // Start overlay (HTML layer handles)
+      if (!started) {
+        // nothing here
+      }
+    }
+
+    function drawParallax() {
+      const camX = camera.x * 0.3;
+      // distant mountains
+      ctx.save();
+      ctx.translate(0, 0);
+      const baseY = H*0.7;
+      ctx.fillStyle = '#0a1b3f';
+      ctx.beginPath();
+      ctx.moveTo(0, baseY);
+      const step = 140 * DPR;
+      for (let x = -step; x <= W + step; x += step) {
+        const wx = (x + camX) * 0.0009;
+        const h = 120 + 60 * valueNoise(wx*4000);
+        ctx.lineTo(x, baseY - h * DPR);
+      }
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
+      ctx.closePath();
+      ctx.fill();
+
+      // nearer mountains
+      ctx.fillStyle = '#0e264e';
+      ctx.beginPath();
+      ctx.moveTo(0, baseY + 40*DPR);
+      for (let x = -step; x <= W + step; x += step) {
+        const wx = (x + camX*1.4) * 0.0015;
+        const h = 80 + 80 * valueNoise(wx*3000);
+        ctx.lineTo(x, baseY + 40*DPR - h * DPR);
+      }
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawTerrain() {
+      const p = paramsForLevel(level);
+      const startX = camera.x - 80;
+      const endX = camera.x + (W / DPR) + 160;
+      const step = 8 * DPR;
+
+      // Fill ground
+      ctx.save();
+      ctx.translate(0, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let sx = startX; sx <= endX; sx += step) {
+        const y = terrain.h(sx, level);
+        const cx = (sx - camera.x) * DPR;
+        const cy = y * DPR;
+        if (sx === startX) ctx.lineTo(0, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.lineTo(W, H);
+      ctx.closePath();
+
+      // Ground gradient fill
+      const grd = ctx.createLinearGradient(0, H*0.4, 0, H);
+      grd.addColorStop(0, '#314b63');
+      grd.addColorStop(1, '#122236');
+      ctx.fillStyle = grd;
+      ctx.fill();
+
+      // Ground edge
+      ctx.lineWidth = 2 * DPR;
+      ctx.strokeStyle = 'rgba(220,236,255,0.35)';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawCar() {
+      const cx = (car.x - camera.x) * DPR;
+      const cy = car.y * DPR;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(car.angle);
+
+      // Shadow
+      ctx.save();
+      ctx.rotate(-car.angle);
+      const gy = terrain.h(car.x, level);
+      const d = clamp((car.y - (gy - car.R)), 0, 50);
+      const shAlpha = clamp(0.35 - d*0.006, 0, 0.35);
+      if (shAlpha > 0.01) {
+        ctx.fillStyle = `rgba(0,0,0,${shAlpha})`;
+        ctx.beginPath();
+        ctx.ellipse(0, (car.R + 8) * DPR, 36*DPR, 8*DPR, 0, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Wheels positions relative to body
+      const bodyW = 78 * DPR;
+      const bodyH = 22 * DPR;
+      const wheelR = 14 * DPR;
+      const ax = 30 * DPR, ay = 16 * DPR;
+      const rear = { x: -ax, y: ay };
+      const front = { x: ax, y: ay };
+
+      // Wheels
+      function wheel(x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath(); ctx.arc(0, 0, wheelR, 0, TAU); ctx.fill();
+        ctx.lineWidth = 3*DPR; ctx.strokeStyle = '#e5f1ff'; ctx.stroke();
+        ctx.restore();
+      }
+      wheel(rear.x, rear.y);
+      wheel(front.x, front.y);
+
+      // Body
+      ctx.fillStyle = '#58b0ff';
+      roundRect(ctx, -bodyW/2, -bodyH/2 - 6*DPR, bodyW, bodyH+8*DPR, 8*DPR);
+      ctx.fillStyle = '#1b58a8';
+      roundRect(ctx, -bodyW/2, -bodyH/2 - 6*DPR, bodyW, (bodyH+8*DPR), 8*DPR, true);
+
+      // Cabin / window
+      ctx.fillStyle = 'rgba(230,245,255,.9)';
+      roundRect(ctx, -6*DPR, -bodyH/2 - 0, 30*DPR, 12*DPR, 6*DPR);
+      // Stripe
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(-bodyW/2+8*DPR, 2*DPR, bodyW-16*DPR, 3*DPR);
+
+      // Nose light indicator when gas
+      if (Input.up && !paused && started && !car.dead) {
+        ctx.fillStyle = '#ffe27a';
+        ctx.beginPath();
+        ctx.ellipse(bodyW/2 - 6*DPR, -2*DPR, 6*DPR, 3*DPR, 0, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r, strokeOnly=false) {
+      const rr = Math.min(r, Math.abs(w/2), Math.abs(h/2));
+      ctx.beginPath();
+      ctx.moveTo(x+rr, y);
+      ctx.arcTo(x+w, y, x+w, y+h, rr);
+      ctx.arcTo(x+w, y+h, x, y+h, rr);
+      ctx.arcTo(x, y+h, x, y, rr);
+      ctx.arcTo(x, y, x+w, y, rr);
+      strokeOnly ? ctx.stroke() : ctx.fill();
+    }
+
+    function drawParticles() {
+      ctx.save();
+      for (const p of particles) {
+        const x = (p.x - camera.x) * DPR;
+        const y = p.y * DPR;
+        const life = clamp(1 - p.t/p.life, 0, 1);
+        ctx.globalAlpha = life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x, y, p.r*DPR, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function drawCenteredText(txt, x, y, size, color) {
+      ctx.save();
+      ctx.font = `700 ${size*DPR}px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, x, y);
+      ctx.restore();
+    }
+
+    // Start game
+    reset(true);
+    requestAnimationFrame(loop);
+
+    // Click on overlay to start if not started
+    overlay.addEventListener('click', (e) => {
+      if (!started) {
+        started = true;
+        overlay.classList.add('hidden');
+      }
+    });
+
+    // Restart on button inside overlay
+    btnStart.addEventListener('click', () => {
+      if (car.dead || !started) {
+        reset(false);
+        started = true;
+        overlay.classList.add('hidden');
+      }
+    });
+
+    // Also R to restart if dead
+    document.addEventListener('keydown', e => {
+      if (e.code === 'KeyR' && (car.dead || !started)) {
+        e.preventDefault();
+        reset(false);
+        started = true;
+        overlay.classList.add('hidden');
+      }
+    });
+
+  })();
+  </script>
+</body>
+</html>

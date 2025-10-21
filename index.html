@@ -14,6 +14,9 @@
     <div class="header-content">
       <h1 class="app-title">English Words</h1>
       <div class="header-actions">
+        <button class="support-btn" id="supportBtn" data-testid="support-btn" title="Поддержать проект">
+          <i class="fas fa-heart"></i>
+        </button>
         <button class="theme-toggle" id="themeToggle" data-testid="theme-toggle">
           <i class="fas fa-moon"></i>
         </button>
@@ -39,6 +42,16 @@
           <p>Прослушивание правильного произношения слов (британский и американский акценты)</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-gamepad"></i></div>
+          <h3>Учите английские слова играя в игры</h3>
+          <p>Играйте в разные увлекательные игры! Спустя время у вас будет появляться quiz, на который нужно ответить правильно, чтобы продолжить играть. Это помогает закрепить изученные слова в игровой форме.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-laugh-beam"></i></div>
+          <h3>Позитивная атмосфера обучения</h3>
+          <p>В приложении добавлены смешные картинки и мемы, чтобы атмосфера изучения английских слов была позитивной, интересной и мотивирующей!</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
           <h3>Отслеживание прогресса</h3>
           <p>Учет изученных слов и прогресс по уровням</p>
@@ -46,7 +59,7 @@
         <div class="author-info">
           <h3>Об авторе методики</h3>
           <p>Приложение создано на основе методики <strong>Абдуррахима Бердиева</strong>.</p>
-          <a href="https://berdiyev-eng.tilda.ws/" target="_blank" class="author-link">
+          <a href="https://berdiyev-eng.ru/me" target="_blank" class="author-link">
             <i class="fas fa-external-link-alt"></i> Узнать больше об авторе
           </a>
         </div>
@@ -215,11 +228,11 @@
         <p class="mode-help" id="bulkHelp" data-testid="bulk-help">
           Формат (каждая строка):<br>
           english word - перевод1, перевод2, перевод3<br>
-          Важно: все значения через запятую относятся к последнему слову, пока не встретится новое « - ». Примеры:<br>
+          Важно: все значения через запятую относятся к одному слову. Примеры:<br>
           go - идти, ходить, ехать<br>
           table - стол<br>
           run - бежать, запускать, управлять<br>
-          Уровень из селектора применится ко всем строкам ниже.
+          Уровень из селектора применится ко всем строкам.
         </p>
         <div class="form-group">
           <label for="bulkLevel">Уровень для всех слов</label>
@@ -263,23 +276,23 @@
       </div>
 
       <div class="games-grid">
-        <!-- RACE -->
+        <!-- SUBWAY SURFERS -->
         <div class="game-card">
-          <img src="race.jpg" alt="Гонки" class="game-cover" onerror="this.src='nophoto.jpg'">
+          <img src="surf.jpg" alt="Subway Surfers" class="game-cover" onerror="this.src='nophoto.jpg'">
           <div class="game-info">
-            <h3>Гонки — бесконечно</h3>
-            <p>Уворачивайся от трафика. Чтобы начать и продолжить — ответь правильно на 3 слова.</p>
-            <button class="btn btn-primary" id="raceStartBtn" data-testid="race-start-btn">Старт</button>
+            <h3>Subway Surfers</h3>
+            <p>Уворачивайся от трафика. Чтобы начать — ответь правильно на 3 слова.</p>
+            <button class="btn btn-primary" id="surfStartBtn" data-testid="surf-start-btn">Старт</button>
           </div>
         </div>
 
-        <!-- GEOMETRY DASH -->
+        <!-- DOODLE JUMP -->
         <div class="game-card">
-          <img src="dash.jpg" alt="Cube Dash" class="game-cover" onerror="this.src='nophoto.jpg'">
+          <img src="doodle-jump.jpg" alt="Doodle Jump" class="game-cover" onerror="this.src='nophoto.jpg'">
           <div class="game-info">
-            <h3>Cube Dash</h3>
-            <p>Раннер в стиле Geometry Dash. Начало/продолжение — после 3 правильных ответов.</p>
-            <button class="btn btn-primary" id="dashStartBtn" data-testid="dash-start-btn">Старт</button>
+            <h3>Doodle Jump</h3>
+            <p>Прыгай выше! Начало — после 3 правильных ответов.</p>
+            <button class="btn btn-primary" id="doodleStartBtn" data-testid="doodle-start-btn">Старт</button>
           </div>
         </div>
 
@@ -290,6 +303,26 @@
             <h3>2048</h3>
             <p>Классическая головоломка. Собери плитку 2048!</p>
             <button class="btn btn-primary" id="game2048StartBtn" data-testid="2048-start-btn">Старт</button>
+          </div>
+        </div>
+
+        <!-- ROCKET SOCCER DERBY -->
+        <div class="game-card">
+          <img src="rocket-soccer.jpg" alt="Rocket Soccer Derby" class="game-cover" onerror="this.src='nophoto.jpg'">
+          <div class="game-info">
+            <h3>Rocket Soccer Derby</h3>
+            <p>Футбол на машинах! Начало после 3 правильных ответов.</p>
+            <button class="btn btn-primary" id="rocketStartBtn" data-testid="rocket-start-btn">Старт</button>
+          </div>
+        </div>
+
+        <!-- CATALOG -->
+        <div class="game-card">
+          <img src="catalog.jpg" alt="Каталог игр" class="game-cover" onerror="this.src='nophoto.jpg'">
+          <div class="game-info">
+            <h3>Каталог игр</h3>
+            <p>Огромный каталог онлайн игр. Quiz появляется каждые 3 минуты.</p>
+            <button class="btn btn-primary" id="catalogStartBtn" data-testid="catalog-start-btn">Открыть</button>
           </div>
         </div>
       </div>
@@ -305,22 +338,22 @@
   </main>
 
   <nav class="bottom-nav" id="bottomNav">
-    <button class="nav-item active" type="button" data-section="about" data-testid="nav-about" onclick="window.app && app.switchSection('about')">
+    <button class="nav-item active" type="button" data-section="about" data-testid="nav-about">
       <i class="fas fa-info-circle"></i><span>О приложении</span>
     </button>
-    <button class="nav-item" type="button" data-section="levels" data-testid="nav-levels" onclick="window.app && app.switchSection('levels')">
+    <button class="nav-item" type="button" data-section="levels" data-testid="nav-levels">
       <i class="fas fa-layer-group"></i><span>Уровни</span>
     </button>
-    <button class="nav-item" type="button" data-section="learning" data-testid="nav-learning" onclick="window.app && app.switchSection('learning')">
+    <button class="nav-item" type="button" data-section="learning" data-testid="nav-learning">
       <i class="fas fa-book-reader"></i><span>Изучаю</span>
     </button>
-    <button class="nav-item" type="button" data-section="new-words" data-testid="nav-new-words" onclick="window.app && app.switchSection('new-words')">
+    <button class="nav-item" type="button" data-section="new-words" data-testid="nav-new-words">
       <i class="fas fa-plus"></i><span>Новые</span>
     </button>
-    <button class="nav-item" type="button" data-section="games" data-testid="nav-games" onclick="window.app && app.switchSection('games')">
+    <button class="nav-item" type="button" data-section="games" data-testid="nav-games">
       <i class="fas fa-gamepad"></i><span>Игры</span>
     </button>
-    <button class="nav-item" type="button" data-section="progress" data-testid="nav-progress" onclick="window.app && app.switchSection('progress')">
+    <button class="nav-item" type="button" data-section="progress" data-testid="nav-progress">
       <i class="fas fa-chart-line"></i><span>Прогресс</span>
     </button>
   </nav>

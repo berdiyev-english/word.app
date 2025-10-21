@@ -431,5 +431,309 @@ const oxfordWordsDatabase = {
       "category": "adjectives",
       "pos": "adj."
     }
+  ],
+  "IRREGULARS": [
+    {
+      "word": "be",
+      "translation": "быть, находиться",
+      "forms": ["be", "was/were", "been"],
+      "pos": "v."
+    },
+    {
+      "word": "have",
+      "translation": "иметь",
+      "forms": ["have", "had", "had"],
+      "pos": "v."
+    },
+    {
+      "word": "do",
+      "translation": "делать",
+      "forms": ["do", "did", "done"],
+      "pos": "v."
+    },
+    {
+      "word": "go",
+      "translation": "идти, ехать",
+      "forms": ["go", "went", "gone"],
+      "pos": "v."
+    },
+    {
+      "word": "get",
+      "translation": "получать",
+      "forms": ["get", "got", "got/gotten"],
+      "pos": "v."
+    },
+    {
+      "word": "make",
+      "translation": "делать, создавать",
+      "forms": ["make", "made", "made"],
+      "pos": "v."
+    },
+    {
+      "word": "see",
+      "translation": "видеть",
+      "forms": ["see", "saw", "seen"],
+      "pos": "v."
+    },
+    {
+      "word": "know",
+      "translation": "знать",
+      "forms": ["know", "knew", "known"],
+      "pos": "v."
+    },
+    {
+      "word": "take",
+      "translation": "брать",
+      "forms": ["take", "took", "taken"],
+      "pos": "v."
+    },
+    {
+      "word": "come",
+      "translation": "приходить",
+      "forms": ["come", "came", "come"],
+      "pos": "v."
+    },
+    {
+      "word": "think",
+      "translation": "думать",
+      "forms": ["think", "thought", "thought"],
+      "pos": "v."
+    },
+    {
+      "word": "give",
+      "translation": "давать",
+      "forms": ["give", "gave", "given"],
+      "pos": "v."
+    },
+    {
+      "word": "find",
+      "translation": "находить",
+      "forms": ["find", "found", "found"],
+      "pos": "v."
+    },
+    {
+      "word": "tell",
+      "translation": "рассказывать",
+      "forms": ["tell", "told", "told"],
+      "pos": "v."
+    },
+    {
+      "word": "become",
+      "translation": "становиться",
+      "forms": ["become", "became", "become"],
+      "pos": "v."
+    },
+    {
+      "word": "leave",
+      "translation": "покидать, уезжать",
+      "forms": ["leave", "left", "left"],
+      "pos": "v."
+    },
+    {
+      "word": "feel",
+      "translation": "чувствовать",
+      "forms": ["feel", "felt", "felt"],
+      "pos": "v."
+    },
+    {
+      "word": "bring",
+      "translation": "приносить",
+      "forms": ["bring", "brought", "brought"],
+      "pos": "v."
+    },
+    {
+      "word": "begin",
+      "translation": "начинать",
+      "forms": ["begin", "began", "begun"],
+      "pos": "v."
+    },
+    {
+      "word": "keep",
+      "translation": "держать, хранить",
+      "forms": ["keep", "kept", "kept"],
+      "pos": "v."
+    },
+    {
+      "word": "hold",
+      "translation": "держать",
+      "forms": ["hold", "held", "held"],
+      "pos": "v."
+    },
+    {
+      "word": "write",
+      "translation": "писать",
+      "forms": ["write", "wrote", "written"],
+      "pos": "v."
+    },
+    {
+      "word": "stand",
+      "translation": "стоять",
+      "forms": ["stand", "stood", "stood"],
+      "pos": "v."
+    },
+    {
+      "word": "hear",
+      "translation": "слышать",
+      "forms": ["hear", "heard", "heard"],
+      "pos": "v."
+    },
+    {
+      "word": "let",
+      "translation": "позволять",
+      "forms": ["let", "let", "let"],
+      "pos": "v."
+    },
+    {
+      "word": "mean",
+      "translation": "означать",
+      "forms": ["mean", "meant", "meant"],
+      "pos": "v."
+    },
+    {
+      "word": "set",
+      "translation": "устанавливать",
+      "forms": ["set", "set", "set"],
+      "pos": "v."
+    },
+    {
+      "word": "meet",
+      "translation": "встречать",
+      "forms": ["meet", "met", "met"],
+      "pos": "v."
+    },
+    {
+      "word": "run",
+      "translation": "бежать",
+      "forms": ["run", "ran", "run"],
+      "pos": "v."
+    },
+    {
+      "word": "pay",
+      "translation": "платить",
+      "forms": ["pay", "paid", "paid"],
+      "pos": "v."
+    },
+    {
+      "word": "sit",
+      "translation": "сидеть",
+      "forms": ["sit", "sat", "sat"],
+      "pos": "v."
+    },
+    {
+      "word": "speak",
+      "translation": "говорить",
+      "forms": ["speak", "spoke", "spoken"],
+      "pos": "v."
+    },
+    {
+      "word": "lie",
+      "translation": "лежать",
+      "forms": ["lie", "lay", "lain"],
+      "pos": "v."
+    },
+    {
+      "word": "lead",
+      "translation": "вести",
+      "forms": ["lead", "led", "led"],
+      "pos": "v."
+    },
+    {
+      "word": "read",
+      "translation": "читать",
+      "forms": ["read", "read", "read"],
+      "pos": "v."
+    },
+    {
+      "word": "grow",
+      "translation": "расти",
+      "forms": ["grow", "grew", "grown"],
+      "pos": "v."
+    },
+    {
+      "word": "lose",
+      "translation": "терять",
+      "forms": ["lose", "lost", "lost"],
+      "pos": "v."
+    },
+    {
+      "word": "fall",
+      "translation": "падать",
+      "forms": ["fall", "fell", "fallen"],
+      "pos": "v."
+    },
+    {
+      "word": "send",
+      "translation": "отправлять",
+      "forms": ["send", "sent", "sent"],
+      "pos": "v."
+    },
+    {
+      "word": "build",
+      "translation": "строить",
+      "forms": ["build", "built", "built"],
+      "pos": "v."
+    }
+  ],
+  "PREPOSITIONS": [
+    {
+      "word": "in",
+      "translation": "в",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "on",
+      "translation": "на",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "at",
+      "translation": "в, на, у",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "by",
+      "translation": "у, около, к",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "for",
+      "translation": "для",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "with",
+      "translation": "с",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "from",
+      "translation": "из, от",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "to",
+      "translation": "к, в",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "of",
+      "translation": "из, о",
+      "category": "prepositions",
+      "pos": "prep."
+    },
+    {
+      "word": "about",
+      "translation": "о, об",
+      "category": "prepositions",
+      "pos": "prep."
+    }
   ]
 };

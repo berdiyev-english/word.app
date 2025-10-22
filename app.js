@@ -16,6 +16,7 @@ class EnglishWordsApp {
     // runtime flags
     this.lastFlashcardFrontWasRussian = false;
     this.currentAudio = null;
+    this.suppressAutoSpeakOnce = false; // NEW: suppress autoplay on next render (fix stray audio on add/remove)
 
     this.loadData();
     this.initializeUI();
@@ -120,7 +121,7 @@ class EnglishWordsApp {
           cleanup();
           reject(new Error('Audio error'));
         };
-        // Safety timeout (in case no ended fires)
+        // Safety timeout
         setTimeout(() => {
           if (!endedOrFailed && audio && !audio.paused) return; // still playing
           if (!endedOrFailed) {
@@ -204,7 +205,7 @@ class EnglishWordsApp {
   // =========================
   getPrimaryImageUrl(wordObj) {
     const base = (this.getBaseEnglish(wordObj) || '').toLowerCase().trim();
-    // источник: britlex (нужен lower-case + encodeURIComponent)
+    // источник: britlex (lower-case + encodeURIComponent)
     return `https://britlex.ru/images/${encodeURIComponent(base)}.jpg`;
   }
   getFallbackImageUrl() {
@@ -435,7 +436,7 @@ class EnglishWordsApp {
   switchSection(section) {
     this.currentSection = section;
 
-    // Stop any ongoing audio when switching sections to avoid stray playback (like 'airport')
+    // Stop any ongoing audio when switching sections to avoid stray playback
     this.stopCurrentAudio();
 
     document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
@@ -449,7 +450,7 @@ class EnglishWordsApp {
     if (activeBtn) activeBtn.classList.add('active');
 
     if (section === 'levels') this.backToLevels();
-    if (section === 'learning') this.renderLearningSection();
+    if (section === 'learning') this.renderLearningSection(); // allow autoplay when navigating here
     if (section === 'progress') this.renderProgress();
     if (section === 'new-words') this.renderCustomWords();
   }
@@ -598,10 +599,16 @@ class EnglishWordsApp {
       this.saveData();
       this.showNotification(`Слово "${word}" добавлено в изучаемые!`, 'success');
 
+      // Refresh lists/cards UI
       if (this.currentLevel === level || this.currentCategory === level) {
         this.currentLevel ? this.showLevelWords(this.currentLevel) : this.showCategoryWords(this.currentCategory);
       }
-      this.renderLearningSection();
+
+      // Render learning only if active, and suppress autoplay for this render
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
     }
   }
   removeWordFromLearning(word, level) {
@@ -617,7 +624,11 @@ class EnglishWordsApp {
       if (this.currentLevel === level || this.currentCategory === level) {
         this.currentLevel ? this.showLevelWords(this.currentLevel) : this.showCategoryWords(this.currentCategory);
       }
-      this.renderLearningSection();
+
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
     }
   }
   addAllLevelWords() {
@@ -650,7 +661,11 @@ class EnglishWordsApp {
       this.saveData();
       this.showNotification(`Добавлено ${addedCount} слов в изучаемые!`, 'success');
       this.currentLevel ? this.showLevelWords(this.currentLevel) : this.showCategoryWords(this.currentCategory);
-      this.renderLearningSection();
+
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
     } else {
       this.showNotification('Все слова уже добавлены', 'info');
     }
@@ -670,7 +685,11 @@ class EnglishWordsApp {
       this.saveData();
       this.showNotification(`Удалено ${removedCount} слов из изучаемых`, 'success');
       this.currentLevel ? this.showLevelWords(this.currentLevel) : this.showCategoryWords(this.currentCategory);
-      this.renderLearningSection();
+
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
     }
   }
   initializeWordStats(word) {
@@ -730,7 +749,11 @@ class EnglishWordsApp {
 
     this.showNotification(`Слово "${word}" добавлено!`, 'success');
     this.renderCustomWords();
-    this.renderLearningSection();
+
+    if (this.currentSection === 'learning') {
+      this.suppressAutoSpeakOnce = true;
+      this.renderLearningSection();
+    }
   }
 
   // Mass add with robust parsing
@@ -794,7 +817,11 @@ class EnglishWordsApp {
       textarea.value = '';
       this.showNotification(`Добавлено ${addedCount} слов!`, 'success');
       this.renderCustomWords();
-      this.renderLearningSection();
+
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
     } else {
       this.showNotification('Новые слова не найдены (возможны дубли)', 'info');
     }
@@ -845,7 +872,11 @@ class EnglishWordsApp {
     this.saveData();
     this.showNotification(`Слово "${word}" удалено`, 'success');
     this.renderCustomWords();
-    this.renderLearningSection();
+
+    if (this.currentSection === 'learning') {
+      this.suppressAutoSpeakOnce = true;
+      this.renderLearningSection();
+    }
   }
 
   // =========
@@ -1012,13 +1043,16 @@ class EnglishWordsApp {
       </div>
     `;
 
-    // Autoplay: если фронт на английском — сразу озвучка (WoorDhunt-first)
-    if (!this.lastFlashcardFrontWasRussian) {
+    // Autoplay: если фронт на английском — сразу озвучка (WoorDhunt-first),
+    // но только если раздел "learning" активен и не подавлен suppress флагом
+    if (!this.lastFlashcardFrontWasRussian && !this.suppressAutoSpeakOnce && this.currentSection === 'learning') {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
         else this.playSingleWordMp3(word.word, 'us');
       }, 250);
     }
+    // reset suppression after render
+    this.suppressAutoSpeakOnce = false;
   }
   showFlashcardAnswer() {
     const answer = document.getElementById('flashcardAnswer');
@@ -1031,7 +1065,7 @@ class EnglishWordsApp {
     if (playBtn) playBtn.classList.remove('hidden');
     if (answerBtns) answerBtns.classList.remove('hidden');
 
-    if (this.lastFlashcardFrontWasRussian) {
+    if (this.lastFlashcardFrontWasRussian && this.currentSection === 'learning') {
       const wordsToReview = this.getWordsToReview();
       const word = wordsToReview[this.currentReviewIndex % wordsToReview.length];
       setTimeout(() => {
@@ -1134,13 +1168,15 @@ class EnglishWordsApp {
       </div>
     `;
 
-    // Автопроизношение только на «Изучаю»: EN-вопрос — сразу (WoorDhunt-first)
-    if (direction === 'EN_RU') {
+    // EN question autoplay only if learning is current and not suppressed
+    if (direction === 'EN_RU' && !this.suppressAutoSpeakOnce && this.currentSection === 'learning') {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
         else this.playSingleWordMp3(word.word, 'us');
       }, 200);
     }
+    // reset suppression after render
+    this.suppressAutoSpeakOnce = false;
   }
 
   quizPlayQuestion(word, forms, region) {
@@ -1205,8 +1241,8 @@ class EnglishWordsApp {
     const wordsToReview = this.getWordsToReview();
     const wordObj = wordsToReview.find(w => w.word === wordToPlay);
 
-    // RU_EN — после ответа: WoorDhunt-first, fallback speech
-    if (direction === 'RU_EN') {
+    // RU_EN — после ответа: WoorDhunt-first, fallback speech (only if learning active)
+    if (direction === 'RU_EN' && this.currentSection === 'learning') {
       setTimeout(() => {
         if (wordObj && wordObj.forms && wordObj.forms.length > 0) {
           this.playFormsSequence(wordObj.forms, 'us');
@@ -1270,11 +1306,15 @@ class EnglishWordsApp {
     this.playWord(word, forms, region || 'us');
   }
   toggleWordLearned(word) {
+    this.stopCurrentAudio();
     const wordObj = this.learningWords.find(w => w.word === word);
     if (wordObj) {
       wordObj.isLearned = !wordObj.isLearned;
       this.saveData();
-      this.renderLearningSection();
+      if (this.currentSection === 'learning') {
+        this.suppressAutoSpeakOnce = true;
+        this.renderLearningSection();
+      }
       this.showNotification(
         wordObj.isLearned ? 'Слово отмечено как выученное!' : 'Слово возвращено в изучение',
         'success'

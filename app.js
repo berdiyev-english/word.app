@@ -38,14 +38,17 @@ class EnglishWordsApp {
     }
     return wordObj.word;
   }
+  getBaseEnglish(wordObj) {
+    if (!wordObj) return '';
+    return (wordObj.forms && wordObj.forms.length > 0) ? wordObj.forms[0] : wordObj.word;
+  }
+
   cleanWordForAudio(raw) {
     if (!raw) return '';
     const w = String(raw).toLowerCase().trim();
-    // keep letters, apostrophes, hyphen and spaces for candidates
     const basic = w.replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
     return basic;
   }
-  // Try multiple candidates for a word: full, nospace, first token
   buildAudioCandidates(baseWord) {
     const cleaned = this.cleanWordForAudio(baseWord);
     if (!cleaned) return [];
@@ -73,7 +76,70 @@ class EnglishWordsApp {
       }
     } catch {}
   }
-  // Core play single word (mp3). Default prefer US, fallback UK, then speechSynthesis
+  // MP3 play that resolves when playback finishes (no overlap)
+  playMp3Url(url) {
+    return new Promise((resolve, reject) => {
+      try {
+        this.stopCurrentAudio();
+        const audio = new Audio(url);
+        this.currentAudio = audio;
+
+        let endedOrFailed = false;
+        const cleanup = () => {
+          if (endedOrFailed) return;
+          endedOrFailed = true;
+          try {
+            audio.onended = null;
+            audio.onerror = null;
+            audio.oncanplaythrough = null;
+          } catch {}
+        };
+
+        audio.oncanplaythrough = () => {
+          audio.play().catch(err => {
+            cleanup();
+            reject(err);
+          });
+        };
+        audio.onended = () => {
+          cleanup();
+          resolve(true);
+        };
+        audio.onerror = () => {
+          cleanup();
+          reject(new Error('Audio error'));
+        };
+        // Safety timeout (in case no ended fires)
+        setTimeout(() => {
+          if (!endedOrFailed && audio && !audio.paused) return; // still playing
+          if (!endedOrFailed) {
+            try { audio.pause(); } catch {}
+            cleanup();
+            reject(new Error('Audio timeout'));
+          }
+        }, 15000);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+  async playSpeechFallback(word) {
+    if ('speechSynthesis' in window && this.isEnglish(word)) {
+      try {
+        await new Promise((resolve) => {
+          const u = new SpeechSynthesisUtterance(word);
+          u.lang = 'en-US';
+          u.rate = 0.85;
+          u.onend = resolve;
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        });
+        return true;
+      } catch {}
+    }
+    return false;
+  }
+  // Core play single word (mp3). Default prefer US, fallback UK, then speechSynthesis; resolves after finish
   async playSingleWordMp3(word, regionPreferred = 'us') {
     const candidates = this.buildAudioCandidates(word);
     if (candidates.length === 0) return this.playSpeechFallback(word);
@@ -92,58 +158,20 @@ class EnglishWordsApp {
     }
     return this.playSpeechFallback(word);
   }
-  playSpeechFallback(word) {
-    if ('speechSynthesis' in window && this.isEnglish(word)) {
-      try {
-        const u = new SpeechSynthesisUtterance(word);
-        u.lang = 'en-US';
-        u.rate = 0.85;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-        return true;
-      } catch {}
-    }
-    return false;
-  }
-  playMp3Url(url) {
-    return new Promise((resolve, reject) => {
-      try {
-        this.stopCurrentAudio();
-        const audio = new Audio(url);
-        this.currentAudio = audio;
-        audio.oncanplaythrough = () => {
-          audio.play().then(resolve).catch(reject);
-        };
-        audio.onerror = reject;
-        // Safety timeout 5s
-        setTimeout(() => {
-          if (audio && audio.readyState < 2) {
-            try { audio.pause(); } catch {}
-            reject(new Error('Audio timeout'));
-          }
-        }, 5000);
-      } catch (e) {
-        reject(e);
-      }
-    });
-  }
-  // Sequence play for irregular forms
+  // Sequence play for irregular forms (strictly sequential, no overlap)
   async playFormsSequence(forms, regionPreferred = 'us') {
     if (!forms || !forms.length) return false;
     for (let i = 0; i < forms.length; i++) {
       const form = forms[i];
-      // try play this form
       await this.playSingleWordMp3(form, regionPreferred);
-      // Small pause between forms
-      await new Promise(res => setTimeout(res, 250));
+      // small pause between words
+      await new Promise(res => setTimeout(res, 200));
     }
     return true;
   }
   // Public unified API for UI buttons
   async playWord(word, forms = null, region = null) {
-    // if forms is string mistakenly passed, normalize
     if (typeof forms === 'string') {
-      // some calls could pass first form; treat as array with single entry for sequence
       forms = [forms];
     }
     const regionPref = (region === 'uk' || region === 'us') ? region : 'us';
@@ -152,10 +180,51 @@ class EnglishWordsApp {
         await this.playFormsSequence(forms, regionPref);
         return;
       } catch {
-        // fallback to base word
+        // fallback to base
       }
     }
     await this.playSingleWordMp3(word, regionPref);
+  }
+
+  // =========================
+  // Image helpers
+  // =========================
+  getPrimaryImageUrl(wordObj) {
+    const base = this.getBaseEnglish(wordObj) || '';
+    const clean = String(base).trim();
+    // источник: britlex с encodeURIComponent
+    return `https://britlex.ru/images/${encodeURIComponent(clean)}.jpg`;
+  }
+  getFallbackImageUrl() {
+    const n = Math.floor(Math.random() * 100) + 1;
+    return `${n}.jpg`;
+  }
+  handleImageError(imgEl) {
+    // Первая ошибка: подставить рандом 1..100
+    if (!imgEl.dataset.fallbackTried) {
+      imgEl.dataset.fallbackTried = '1';
+      imgEl.src = this.getFallbackImageUrl();
+      return;
+    }
+    // Вторая ошибка: подставить nophoto
+    imgEl.onerror = null;
+    imgEl.src = 'nophoto.jpg';
+  }
+  handleMotivationImageError(imgEl) {
+    // Сначала пробуем мотивацию из папки /motivation/, затем — из корня, затем nophoto
+    if (!imgEl.dataset.step) {
+      imgEl.dataset.step = '1';
+      const current = imgEl.dataset.index || '1';
+      imgEl.src = `${current}.jpg`;
+      return;
+    } else if (imgEl.dataset.step === '1') {
+      imgEl.dataset.step = '2';
+      imgEl.src = 'nophoto.jpg';
+      return;
+    } else {
+      imgEl.onerror = null;
+      imgEl.src = 'nophoto.jpg';
+    }
   }
 
   // =========================
@@ -410,6 +479,11 @@ class EnglishWordsApp {
       wordsList.innerHTML = words.map(word => this.createWordCard(word, level)).join('');
       this.attachWordCardListeners();
     }
+
+    // Автопрокрутка к списку
+    if (container) {
+      setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
   }
 
   showCategoryWords(category) {
@@ -429,6 +503,11 @@ class EnglishWordsApp {
     if (wordsList) {
       wordsList.innerHTML = words.map(word => this.createWordCard(word, category)).join('');
       this.attachWordCardListeners();
+    }
+
+    // Автопрокрутка к списку
+    if (container) {
+      setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   }
 
@@ -479,7 +558,7 @@ class EnglishWordsApp {
     `;
   }
   attachWordCardListeners() {
-    // inlined onclick used
+    // inline onclick
   }
   safeAttr(str) {
     if (!str) return '';
@@ -604,7 +683,6 @@ class EnglishWordsApp {
       addedAt: Date.now()
     };
 
-    // dedupe by word + level
     const exists = this.customWords.some(w => w.word.toLowerCase() === word.toLowerCase() && w.level === level);
     if (!exists) this.customWords.push(newWord);
 
@@ -647,10 +725,9 @@ class EnglishWordsApp {
       if (parts.length < 2) return;
 
       const left = parts[0].trim();
-      const translation = parts.slice(1).join(' - ').trim(); // support extra hyphens on right
+      const translation = parts.slice(1).join(' - ').trim();
       if (!left || !translation) return;
 
-      // detect forms: "a, b, c" or "a → b → c"
       let word = left;
       let forms = null;
       if (left.includes('→') || left.includes(',')) {
@@ -658,7 +735,7 @@ class EnglishWordsApp {
         const cleanedForms = rawForms.map(f => f.trim()).filter(Boolean);
         if (cleanedForms.length >= 2) {
           forms = cleanedForms;
-          word = cleanedForms[0]; // base form is first
+          word = cleanedForms[0];
         }
       }
 
@@ -760,6 +837,62 @@ class EnglishWordsApp {
     } else if (this.currentMode === 'list') {
       this.renderWordsList();
     }
+
+    // Вставить панель мотивации поверх контента
+    this.insertMotivationPanel(container);
+  }
+
+  // =========
+  // Motivation UI
+  // =========
+  insertMotivationPanel(containerEl) {
+    if (!containerEl) return;
+    if (containerEl.querySelector('#motivationBar')) return; // уже вставлено
+
+    const bar = document.createElement('div');
+    bar.id = 'motivationBar';
+    bar.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;';
+
+    const getBtn = document.createElement('button');
+    getBtn.className = 'btn btn-primary';
+    getBtn.textContent = 'получить';
+    getBtn.style.cssText = 'font-weight:700;';
+    getBtn.addEventListener('click', () => this.showMotivation(containerEl));
+
+    const label = document.createElement('span');
+    label.textContent = 'ежедневная мотивация';
+    label.style.cssText = 'font-weight:700;color:var(--text-primary);';
+
+    bar.appendChild(getBtn);
+    bar.appendChild(label);
+
+    containerEl.insertAdjacentElement('afterbegin', bar);
+  }
+  showMotivation(containerEl) {
+    let box = containerEl.querySelector('#motivationBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'motivationBox';
+      box.style.cssText = 'background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;padding:12px;margin-bottom:14px;';
+      containerEl.insertAdjacentElement('afterbegin', box);
+    }
+    const n = Math.floor(Math.random() * 61) + 1;
+    const title = `<div style="font-weight:900;font-size:18px;margin-bottom:10px;color:var(--text-primary);">ТВОЯ МОТИВАЦИЯ НА СЕГОДНЯ :</div>`;
+    // сначала пробуем /motivation/n.jpg, при ошибке - n.jpg, затем nophoto.jpg
+    const img = `
+      <div style="width:100%;display:flex;align-items:center;justify-content:center;">
+        <img 
+          src="motivation/${n}.jpg" 
+          data-index="${n}" 
+          alt="motivation" 
+          style="max-width:100%;height:auto;object-fit:contain;display:block;"
+          onerror="app.handleMotivationImageError(this)"
+        />
+      </div>
+    `;
+    box.innerHTML = title + img;
+    // прокрутить к мотивации, чтобы видеть полностью
+    setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
   // =========
@@ -782,15 +915,15 @@ class EnglishWordsApp {
     }
 
     const word = wordsToReview[this.currentReviewIndex % wordsToReview.length];
-    const imageNum = Math.floor(Math.random() * 100) + 1;
 
     let displayWord = this.getEnglishDisplay(word);
-    // Heuristic: if displayWord is Russian (rare), delay autoplay until flip
     this.lastFlashcardFrontWasRussian = this.isRussian(displayWord);
+
+    const primaryImg = this.getPrimaryImageUrl(word);
 
     container.innerHTML = `
       <div class="flashcard" data-testid="flashcard">
-        <img src="${imageNum}.jpg" alt="flashcard" class="flashcard-image" onerror="this.src='nophoto.jpg'">
+        <img src="${primaryImg}" alt="flashcard" class="flashcard-image" onerror="app.handleImageError(this)">
         <div class="flashcard-body">
           <h3 class="flashcard-title">
             ${displayWord}
@@ -826,7 +959,7 @@ class EnglishWordsApp {
       </div>
     `;
 
-    // Autoplay: if front shows English (default), auto play
+    // Autoplay: если фронт на английском — сразу озвучка
     if (!this.lastFlashcardFrontWasRussian) {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -845,7 +978,6 @@ class EnglishWordsApp {
     if (playBtn) playBtn.classList.remove('hidden');
     if (answerBtns) answerBtns.classList.remove('hidden');
 
-    // If front was Russian, auto play English after flip
     if (this.lastFlashcardFrontWasRussian) {
       const wordsToReview = this.getWordsToReview();
       const word = wordsToReview[this.currentReviewIndex % wordsToReview.length];
@@ -901,9 +1033,8 @@ class EnglishWordsApp {
     }
 
     const word = wordsToReview[this.currentReviewIndex % wordsToReview.length];
-    const imageNum = Math.floor(Math.random() * 100) + 1;
 
-    // Determine direction. If EN side visible, show forms.
+    // Direction; EN side shows forms
     const direction = Math.random() < 0.5 ? 'EN_RU' : 'RU_EN';
     const questionText = direction === 'EN_RU' ? this.getEnglishDisplay(word) : word.translation;
     const correctAnswer = direction === 'EN_RU' ? word.translation : this.getEnglishDisplay(word);
@@ -911,9 +1042,11 @@ class EnglishWordsApp {
     const options = this.buildQuizOptions(word, direction);
     const shuffled = this.shuffle(options);
 
+    const primaryImg = this.getPrimaryImageUrl(word);
+
     container.innerHTML = `
       <div class="quiz-container" data-testid="quiz-container">
-        <img src="${imageNum}.jpg" alt="quiz" class="quiz-image" onerror="this.src='nophoto.jpg'">
+        <img src="${primaryImg}" alt="quiz" class="quiz-image" onerror="app.handleImageError(this)">
         <div class="quiz-question">
           ${questionText}
           <span class="sound-actions" style="margin-left:8px;">
@@ -948,7 +1081,6 @@ class EnglishWordsApp {
       </div>
     `;
 
-    // Autoplay if question is English
     if (direction === 'EN_RU') {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -1019,7 +1151,6 @@ class EnglishWordsApp {
     const wordsToReview = this.getWordsToReview();
     const wordObj = wordsToReview.find(w => w.word === wordToPlay);
 
-    // Auto play rule: if RU_EN (Russian question) — play after answer
     if (direction === 'RU_EN') {
       setTimeout(() => {
         if (wordObj && wordObj.forms && wordObj.forms.length > 0) {
@@ -1325,7 +1456,6 @@ class EnglishWordsApp {
         </div>
       `;
 
-      // Autoplay if question is English
       if (direction === 'EN_RU') {
         setTimeout(() => {
           if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -1388,7 +1518,6 @@ class EnglishWordsApp {
     gameContainer.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#000;';
     gameContainer.id = containerId;
 
-    // Header bar (not overlapping iframe)
     const header = document.createElement('div');
     header.className = 'game-header';
     header.style.cssText = `
@@ -1423,11 +1552,10 @@ class EnglishWordsApp {
 
     this.showNotification(`Игра ${gameName} запущена! Приятной игры!`, 'success');
 
-    // Start periodic quiz cycle
     this.startGameQuizCycle(containerId);
   }
 
-  // External catalog site with periodic quizzes
+  // Внешний каталог с периодическими квизами
   showCatalogGame() {
     if (this.learningWords.filter(w => !w.isLearned).length < 4) {
       this.showNotification('Чтобы играть, добавьте минимум 4 слова в «Изучаю»', 'warning');
@@ -1471,9 +1599,7 @@ class EnglishWordsApp {
     gameContainer.appendChild(iframe);
     document.body.appendChild(gameContainer);
 
-    // Start periodic quiz cycle
     this.startGameQuizCycle(containerId);
-    // Quick first quiz after 1s to engage
     setTimeout(() => this.showOverlayQuiz(containerId), 1000);
   }
 
@@ -1490,7 +1616,7 @@ class EnglishWordsApp {
 
       const quizTimeoutId = setTimeout(() => {
         this.showOverlayQuiz(containerId);
-        schedule(); // schedule next after showing quiz
+        schedule();
       }, QUIZ_DELAY);
 
       this.gameQuizIntervals[containerId] = { warningTimeoutId, quizTimeoutId };
@@ -1572,7 +1698,6 @@ class EnglishWordsApp {
         </div>
       `;
 
-      // Autoplay if question English
       if (direction === 'EN_RU') {
         setTimeout(() => {
           if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -1658,7 +1783,6 @@ class EnglishWordsApp {
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
-  // Load saved theme
   const savedTheme = localStorage.getItem('theme') || 'light';
   document.documentElement.setAttribute('data-theme', savedTheme);
 

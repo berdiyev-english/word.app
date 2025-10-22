@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Бесконечная гонка (только машинка)</title>
+  <style>
+    :root{
+      --bg:#0e1016;
+      --panel:#161b22;
+      --text:#e9f0f7;
+      --sub:#a9b6c6;
+      --accent:#5ad3ff;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; background: radial-gradient(1200px 600px at 80% -20%, #131827 0, transparent 60%), var(--bg);
+      color:var(--text); font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      overflow:hidden; user-select:none; -webkit-user-select:none;
+    }
+    header{
+      position:fixed; left:12px; top:12px; z-index:5;
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+      background:rgba(0,0,0,.35); backdrop-filter: blur(6px);
+      border:1px solid #ffffff22; padding:10px 12px; border-radius:12px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.4);
+    }
+    .card{
+      background:var(--panel); border:1px solid #ffffff1a; border-radius:10px; padding:6px 10px;
+      min-width: 110px; text-align: center;
+    }
+    .card .label{ color:var(--sub); font-size:12px; letter-spacing:.3px; }
+    .card .big{ font-size:18px; font-weight:800; margin-top:2px; }
+    .btn{ appearance:none; border:0; background:linear-gradient(180deg, #3a7df0, #1e57df);
+      color:#fff; font-weight:800; padding:8px 12px; border-radius:10px; cursor:pointer;
+      box-shadow:0 6px 16px rgba(30,87,223,.5), inset 0 1px 0 #ffffff66; }
+    .btn:active{ transform: translateY(1px) scale(.99); }
+    canvas{ display:block; width:100vw; height:100vh; }
+
+    .touch{
+      position:fixed; inset:auto 0 12px 0; display:flex; justify-content:space-between; pointer-events:none; padding:0 12px; z-index:5;
+    }
+    .pedals{
+      pointer-events:auto; display:grid; grid-template-columns:repeat(2, 120px); gap:12px; margin-left:auto;
+    }
+    .ctl{
+      background:rgba(0,0,0,.35); border:1px solid #ffffff22; backdrop-filter: blur(6px);
+      color:#fff; font-weight:800; border-radius:12px; padding:14px 12px; text-align:center;
+      box-shadow:0 10px 24px rgba(0,0,0,.45);
+      min-width:120px; user-select:none; font-size:18px;
+    }
+    .ctl:active{ transform:scale(.98) translateY(1px); }
+    .ctl .mini{ display:block; font-size:12px; color:#e2ecf7aa; margin-top:2px; }
+    .hint{
+      position:fixed; right:12px; top:12px; z-index:5; color:#c9d4e2;
+      background:rgba(0,0,0,.35); border:1px solid #ffffff22; backdrop-filter: blur(6px);
+      padding:10px 12px; border-radius:12px; max-width:320px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="card">
+      <div class="label">Дистанция</div>
+      <div class="big" id="uiDist">0 м</div>
+    </div>
+    <div class="card">
+      <div class="label">Скорость</div>
+      <div class="big" id="uiSpeed">0 км/ч</div>
+    </div>
+    <button class="btn" id="uiRestart">Рестарт (R)</button>
+  </header>
+
+  <div class="hint">Управление: W/↑ — газ, S/↓ — тормоз. Игра бесконечная, старт — ровная поверхность.</div>
+
+  <canvas id="game"></canvas>
+
+  <div class="touch">
+    <div class="pedals">
+      <div class="ctl" id="brake">⏹ Тормоз<span class="mini">S / ↓</span></div>
+      <div class="ctl" id="gas">▶ Газ<span class="mini">W / ↑</span></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+  <script>
+    (()=> {
+      const { Engine, World, Bodies, Body, Constraint, Composite } = Matter;
+
+      // Canvas
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d', { alpha:false });
+      const DPR = Math.min(2, window.devicePixelRatio || 1);
+      function fit(){
+        const w = window.innerWidth, h = window.innerHeight;
+        canvas.width = Math.floor(w * DPR);
+        canvas.height = Math.floor(h * DPR);
+        canvas.style.width = w+'px'; canvas.style.height = h+'px';
+        ctx.setTransform(DPR,0,0,DPR,0,0);
+      }
+      window.addEventListener('resize', fit, {passive:true});
+      fit();
+
+      // UI
+      const uiDist = document.getElementById('uiDist');
+      const uiSpeed = document.getElementById('uiSpeed');
+      const uiRestart = document.getElementById('uiRestart');
+
+      // Controls
+      const input = { gas:false, brake:false };
+      const kmap = new Map([
+        ['KeyW','gas'], ['ArrowUp','gas'],
+        ['KeyS','brake'], ['ArrowDown','brake']
+      ]);
+      window.addEventListener('keydown', (e)=> {
+        const k = kmap.get(e.code);
+        if(k){ input[k] = true; e.preventDefault(); }
+        if(e.code==='KeyR') restart();
+      }, {passive:false});
+      window.addEventListener('keyup', (e)=> {
+        const k = kmap.get(e.code);
+        if(k){ input[k] = false; e.preventDefault(); }
+      }, {passive:false});
+      uiRestart.addEventListener('click', ()=> restart());
+
+      // Touch buttons (hold)
+      function onHold(el, prop){
+        const start = (e)=>{ e.preventDefault(); input[prop]=true; };
+        const end = (e)=>{ e.preventDefault(); input[prop]=false; };
+        el.addEventListener('touchstart', start, {passive:false});
+        el.addEventListener('touchend', end, {passive:false});
+        el.addEventListener('touchcancel', end, {passive:false});
+        el.addEventListener('mousedown', start);
+        window.addEventListener('mouseup', end);
+      }
+      onHold(document.getElementById('gas'), 'gas');
+      onHold(document.getElementById('brake'), 'brake');
+
+      // Physics
+      const engine = Engine.create({ enableSleeping:false });
+      const world = engine.world;
+      world.gravity.y = 1.0;
+
+      // Track generator (endless)
+      const TRACK = {
+        step: 120,
+        baseY: 520,
+        thickness: 40,
+        flatSegments: 14,     // начальный ровный отрезок
+        maxAmp: 160,          // максимальная амплитуда холмов
+        ampRiseLen: 2600,     // длина "разгона" амплитуды после равнины
+        generateAhead: 5000,  // генерить вперед от машины
+        cullBehind: 2000,     // удалять позади машины
+        points: [],
+        segments: [],         // { body, x1, x2 }
+        noiseT: 0
+      };
+
+      function ampAtX(x){
+        const flatX = TRACK.flatSegments*TRACK.step;
+        const dx = Math.max(0, x - flatX);
+        const k = TRACK.ampRiseLen;
+        return TRACK.maxAmp * (1 - Math.exp(-dx / k));
+      }
+      function noiseStep(){
+        TRACK.noiseT += 0.35;
+        const t = TRACK.noiseT;
+        // плавные колебания
+        return Math.sin(t*0.8)*0.55 + Math.sin(t*0.19+1.7)*0.35 + Math.sin(t*0.07+2.3)*0.2;
+      }
+      function addSegment(p1, p2){
+        const dx = p2.x - p1.x, dy = p2.y - p1.y;
+        const len = Math.hypot(dx,dy);
+        const ang = Math.atan2(dy, dx);
+        const mid = { x: p1.x + dx/2, y: p1.y + dy/2 };
+        const seg = Bodies.rectangle(mid.x, mid.y, len+2, TRACK.thickness, {
+          isStatic:true, angle: ang,
+          friction: 0.98, frictionStatic: 1.0, restitution: 0,
+          label:'ground'
+        });
+        World.add(world, seg);
+        TRACK.segments.push({ body: seg, x1: p1.x, x2: p2.x });
+      }
+      function initTrack(){
+        // remove existing
+        for(const s of TRACK.segments){ World.remove(world, s.body); }
+        TRACK.points = [];
+        TRACK.segments = [];
+        TRACK.noiseT = 0;
+
+        // starting flat
+        TRACK.points.push({ x: 0, y: TRACK.baseY });
+        for(let i=1;i<=TRACK.flatSegments;i++){
+          const p = { x: i*TRACK.step, y: TRACK.baseY };
+          addSegment(TRACK.points[TRACK.points.length-1], p);
+          TRACK.points.push(p);
+        }
+      }
+      function generateUntil(targetX){
+        while(TRACK.points[TRACK.points.length-1].x < targetX){
+          const prev = TRACK.points[TRACK.points.length-1];
+          const newX = prev.x + TRACK.step;
+          const amp = ampAtX(newX);
+          const n = noiseStep(); // [-~1.1; ~1.1]
+          let targetY = TRACK.baseY - amp * n;
+          // ограничим крутизну
+          const maxDy = TRACK.step * 0.65;
+          let dy = targetY - prev.y;
+          if(dy > maxDy) dy = maxDy;
+          if(dy < -maxDy) dy = -maxDy;
+          const newY = prev.y + dy;
+
+          const p = { x: newX, y: newY };
+          addSegment(prev, p);
+          TRACK.points.push(p);
+        }
+      }
+      function cullBehind(leftX){
+        // пока второй пункт полигона ушёл далеко влево — удаляем первый сегмент и точку
+        while(TRACK.points.length > 2 && TRACK.points[1].x < leftX){
+          const seg = TRACK.segments.shift();
+          if(seg) World.remove(world, seg.body);
+          TRACK.points.shift();
+        }
+      }
+
+      // Car
+      const car = {
+        groupId: Body.nextGroup(true),
+        chassis: null, wheelF: null, wheelR: null
+      };
+      function buildCar(x=140, y=TRACK.baseY-120){
+        const group = car.groupId;
+        const chassis = Bodies.rectangle(x, y, 120, 26, {
+          label:'chassis', collisionFilter:{ group },
+          density: 0.0016, friction:0.2, frictionAir:0.002
+        });
+        const wheelR = Bodies.circle(x+44, y+22, 24, {
+          label:'wheel', collisionFilter:{ group },
+          density: 0.0016, friction: 0.99, frictionStatic: 1.2, restitution: 0.05
+        });
+        const wheelF = Bodies.circle(x-44, y+22, 24, {
+          label:'wheel', collisionFilter:{ group },
+          density: 0.0016, friction: 0.99, frictionStatic: 1.2, restitution: 0.05
+        });
+
+        const axleR = Constraint.create({
+          bodyA: chassis, pointA:{x: 44, y:12},
+          bodyB: wheelR, pointB:{x:0,y:0},
+          stiffness: 0.9, length: 0
+        });
+        const axleF = Constraint.create({
+          bodyA: chassis, pointA:{x: -44, y:12},
+          bodyB: wheelF, pointB:{x:0,y:0},
+          stiffness: 0.9, length: 0
+        });
+
+        car.chassis = chassis; car.wheelF = wheelF; car.wheelR = wheelR;
+        World.add(world, [chassis, wheelF, wheelR, axleF, axleR]);
+      }
+
+      // Camera and state
+      const cam = { x: 0, y: 0 };
+      const lerp = (a,b,t)=> a+(b-a)*t;
+      let startX = 0, bestX = 0;
+
+      function restart(){
+        // clear world
+        for(const b of Composite.allBodies(world)) World.remove(world, b);
+        for(const c of Composite.allConstraints(world)) World.remove(world, c);
+
+        initTrack();
+        buildCar(140, TRACK.baseY-120);
+
+        startX = car.chassis.position.x;
+        bestX = startX;
+        cam.x = 0; cam.y = 0;
+        // сразу сгенерим вперёд
+        generateUntil(startX + TRACK.generateAhead);
+      }
+
+      // Init
+      restart();
+
+      // Game loop
+      let lastTs = performance.now();
+      function step(ts){
+        const dtMs = Math.min(33, ts - lastTs);
+        lastTs = ts;
+
+        applyControls(dtMs/1000);
+        Engine.update(engine, dtMs);
+
+        // Track management
+        const px = car.chassis.position.x;
+        generateUntil(px + TRACK.generateAhead);
+        cullBehind(px - TRACK.cullBehind);
+
+        // Camera follow
+        const targetX = px - canvas.width/(DPR*2) + 260;
+        const targetY = car.chassis.position.y - canvas.height/(DPR*2) - 40;
+        cam.x = lerp(cam.x, targetX, 0.08);
+        cam.y = lerp(cam.y, targetY, 0.06);
+
+        // Progress UI
+        bestX = Math.max(bestX, px);
+        const distMeters = Math.max(0, ((bestX - startX) / 50) | 0);
+        const kmh = Math.round(car.chassis.speed * 3.6 * 0.02); // «приятные» числа
+        uiDist.textContent = `${distMeters} м`;
+        uiSpeed.textContent = `${kmh} км/ч`;
+
+        render();
+        requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+
+      // Control physics
+      const MOTOR_TORQUE = 0.0016;
+      function applyControls(dt){
+        if(input.gas){
+          car.wheelF.torque += MOTOR_TORQUE;
+          car.wheelR.torque += MOTOR_TORQUE;
+        }
+        if(input.brake){
+          car.wheelF.torque -= MOTOR_TORQUE;
+          car.wheelR.torque -= MOTOR_TORQUE;
+        }
+        // немного гасим вращение колёс
+        car.wheelF.angularVelocity *= 0.9995;
+        car.wheelR.angularVelocity *= 0.9995;
+      }
+
+      // Rendering
+      function render(){
+        const w = canvas.width / DPR;
+        const h = canvas.height / DPR;
+
+        // Sky
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        const g = ctx.createLinearGradient(0,0,0,h);
+        g.addColorStop(0, '#0f1629');
+        g.addColorStop(1, '#0b0f16');
+        ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+        ctx.save();
+        ctx.translate(-cam.x, -cam.y);
+
+        // Parallax hills
+        ctx.save();
+        ctx.globalAlpha = 0.25; drawHills(0.3, 120, '#21324a');
+        ctx.globalAlpha = 0.18; drawHills(0.18, 180, '#1b283e');
+        ctx.restore();
+
+        drawTrack();
+        drawCar();
+
+        ctx.restore();
+      }
+
+      function drawHills(scale, amp, color){
+        const pts = TRACK.points;
+        if(pts.length < 2) return;
+        ctx.beginPath();
+        for(let i=0;i<pts.length;i++){
+          const p = pts[i];
+          const x = p.x*scale + 600;
+          const y = (TRACK.baseY + Math.sin((i+TRACK.noiseT)*0.25)*amp)*scale + 120;
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        const last = pts[pts.length-1];
+        const first = pts[0];
+        ctx.lineTo(last.x*scale+2000, 2000);
+        ctx.lineTo(first.x*scale-2000, 2000);
+        ctx.closePath();
+        ctx.fillStyle = color; ctx.fill();
+      }
+
+      function drawTrack(){
+        const pts = TRACK.points;
+        if(pts.length < 2) return;
+
+        // Fill under track line
+        ctx.beginPath();
+        for(let i=0;i<pts.length;i++){
+          const p = pts[i];
+          if(i===0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        const last = pts[pts.length-1];
+        const first = pts[0];
+        ctx.lineTo(last.x+2000, last.y+3000);
+        ctx.lineTo(first.x-2000, first.y+3000);
+        ctx.closePath();
+        ctx.fillStyle = '#1b2330';
+        ctx.fill();
+
+        // Road edge stroke
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#2c3b54';
+        ctx.beginPath();
+        for(let i=0;i<pts.length;i++){
+          const p = pts[i];
+          if(i===0) ctx.moveTo(p.x, p.y - TRACK.thickness*0.4);
+          else ctx.lineTo(p.x, p.y - TRACK.thickness*0.4);
+        }
+        ctx.stroke();
+      }
+
+      function drawCar(){
+        const ch = car.chassis, wF = car.wheelF, wR = car.wheelR;
+
+        drawWheel(wF, '#2ee6a0');
+        drawWheel(wR, '#2ee6a0');
+
+        // chassis
+        drawBodyRect(ch, 120, 26, '#2a9df4');
+
+        // simple frame lines
+        ctx.save();
+        ctx.translate(ch.position.x, ch.position.y);
+        ctx.rotate(ch.angle);
+        ctx.strokeStyle = '#7fb9ff'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-40, 0); ctx.lineTo(0,-12); ctx.lineTo(40, 0);
+        ctx.moveTo(-10, -12); ctx.lineTo(-32, -18);
+        ctx.stroke();
+        ctx.restore();
+      }
+      function drawWheel(w, color='#66f'){
+        ctx.save();
+        ctx.translate(w.position.x, w.position.y);
+        ctx.rotate(w.angle);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.beginPath(); ctx.arc(0,0, w.circleRadius, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0,0, w.circleRadius*0.7, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        for(let i=0;i<6;i++){
+          const a = i*Math.PI/3;
+          ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*w.circleRadius*0.7, Math.sin(a)*w.circleRadius*0.7);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      function drawBodyRect(b, w, h, color='#888'){
+        ctx.save();
+        ctx.translate(b.position.x, b.position.y);
+        ctx.rotate(b.angle);
+        ctx.fillStyle = color;
+        roundRect(ctx, -w/2, -h/2, w, h, 6);
+        ctx.fill();
+        ctx.restore();
+      }
+      function roundRect(ctx, x, y, w, h, r){
+        const rr = Math.min(r, w/2, h/2);
+        ctx.beginPath();
+        ctx.moveTo(x+rr,y);
+        ctx.arcTo(x+w,y,x+w,y+h,rr);
+        ctx.arcTo(x+w,y+h,x,y+h,rr);
+        ctx.arcTo(x,y+h,x,y,rr);
+        ctx.arcTo(x,y,x+w,y,rr);
+        ctx.closePath();
+      }
+    })();
+  </script>
+</body>
+</html>

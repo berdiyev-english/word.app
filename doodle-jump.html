@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, maximum-scale=1.0, user-scalable=no" />
   <title>Be-Words</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -16,48 +18,136 @@
       overflow: hidden;
       width: 100vw;
       height: 100vh;
+      background: #70c5ce;
     }
-    
+
+    /* Шапка и счёт */
     header {
+      position: relative;            /* чтобы кнопка позиционировалась внутри */
       margin: 0 auto;
       width: 100%;
       max-width: 431px;
+      padding: 10px 12px 12px;
     }
-    
+
     h1 {
       background: url("https://i.ibb.co/Q9yv5Jk/flappy-bird-set.png") 0% 340px;
       padding: 1.2rem 0;
-      margin: 0;
+      margin: 0 0 8px;
     }
-    
+
     .score-container {
       display: flex;
       justify-content: space-between;
-      padding: 8px 6px;
-      background: #5EE270;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(94, 226, 112, 0.9);
+      border-radius: 8px;
+      font-size: 12px;
+      /* место под круглую кнопку справа */
+      padding-right: 70px;
+    }
+
+    /* Сцена игры (канвас + оверлеи) */
+    .stage {
+      position: relative;
       width: 100%;
       max-width: 431px;
       margin: 0 auto;
     }
-    
+
     canvas {
       display: block;
-      margin: 0 auto;
-      max-width: 100%;
+      width: 100%;
       height: auto;
+      margin: 0 auto;
+      image-rendering: crisp-edges;
+      image-rendering: pixelated;
+      touch-action: manipulation;
+      background: #000; /* на случай, если фон не загрузится */
     }
+
+    /* Круглая кнопка паузы — из твоего примера, но внутри header */
+    .pause-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 20;
+      width: 50px;
+      height: 50px;
+      background: rgba(255,255,255,0.9);
+      border: 3px solid #000;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      touch-action: manipulation;
+      transition: transform .08s ease, filter .2s ease;
+    }
+    .pause-btn:active { transform: scale(0.95); }
+    .pause-btn[disabled] { opacity: .6; filter: grayscale(.3); cursor: default; }
+
+    /* Оверлей паузы — поверх канваса (в пределах .stage) */
+    .pause-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 15;
+    }
+    .pause-overlay.active { display: flex; }
+
+    .pause-menu {
+      background: #fff;
+      padding: 30px;
+      border-radius: 15px;
+      text-align: center;
+      border: 5px solid #000;
+      max-width: 80%;
+    }
+    .pause-menu h2 {
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+    .pause-menu button {
+      font-family: 'Press Start 2P', cursive;
+      padding: 15px 30px;
+      font-size: 16px;
+      background: #5EE270;
+      border: 3px solid #000;
+      border-radius: 8px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .pause-menu button:active { transform: scale(0.95); }
   </style>
 </head>
 <body>
   <header>
     <h1>Be-Words</h1>
     <div class="score-container">
-      <div id="bestScore"></div>
-      <div id="currentScore"></div>
+      <div id="bestScore">Best : 0</div>
+      <div id="currentScore">Current : 0</div>
     </div>
+    <!-- Кнопка паузы в шапке, справа; не закрывает счёт -->
+    <button class="pause-btn" id="pauseBtn" title="P / Esc">⏸</button>
   </header>
 
-  <canvas id="canvas" width="431" height="768"></canvas>
+  <div class="stage" id="stage">
+    <canvas id="canvas" width="431" height="768"></canvas>
+
+    <!-- Оверлей паузы поверх канваса -->
+    <div class="pause-overlay" id="pauseOverlay">
+      <div class="pause-menu">
+        <h2>PAUSED</h2>
+        <button id="resumeBtn">RESUME</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const canvas = document.getElementById('canvas');
@@ -65,109 +155,225 @@
     const img = new Image();
     img.src = "https://i.ibb.co/Q9yv5Jk/flappy-bird-set.png";
 
-    // general settings
+    // Состояние игры
     let gamePlaying = false;
-    const gravity = .5;
-    const speed = 6.2;
-    const size = [51, 36];
-    const jump = -11.5;
-    const cTenth = (canvas.width / 10);
+    let paused = false;
 
-    let index = 0,
-        bestScore = 0, 
-        flight, 
-        flyHeight, 
-        currentScore, 
-        pipes;
+    // Физика — плавная и стабильная (delta time)
+    const size = [51, 36]; // размер птицы [w, h]
+    const GRAVITY = 2000;         // px/s^2
+    const JUMP_VELOCITY = -600;   // px/s
+    const MAX_FALL_SPEED = 900;   // px/s
+    const SPEED = 220;            // px/s — скорость труб/фона
+    const PIPE_WIDTH = 78;
+    const GAP_Y = 260;            // вертикальный зазор между трубами
+    const H_GAP = GAP_Y + PIPE_WIDTH; // горизонт расстояние между трубами
+    const birdX = Math.round(canvas.width * 0.18); // позиция птицы по X
 
-    // pipe settings
-    const pipeWidth = 78;
-    const pipeGap = 270;
-    const pipeLoc = () => (Math.random() * ((canvas.height - (pipeGap + pipeWidth)) - pipeWidth)) + pipeWidth;
+    // Переменные
+    let lastTime = 0;
+    let bgOffset = 0;
+    let bestScore = 0;
+    let currentScore = 0;
+
+    // Птица
+    let bird = { x: birdX, y: 0, vy: 0 };
+
+    // Трубы
+    let pipes = [];
+
+    // DOM
+    const pauseBtn = document.getElementById('pauseBtn');
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    const resumeBtn = document.getElementById('resumeBtn');
+
+    // Случайная высота верхней трубы
+    const pipeLoc = () => {
+      const minTop = PIPE_WIDTH;
+      const maxTop = canvas.height - (GAP_Y + PIPE_WIDTH);
+      return Math.floor(Math.random() * (maxTop - minTop) + minTop);
+    };
 
     const setup = () => {
       currentScore = 0;
-      flight = jump;
+      bgOffset = 0;
+      bird = { x: birdX, y: (canvas.height / 2) - (size[1] / 2), vy: 0 };
+      pipes = Array.from({ length: 3 }, (_, i) => ({
+        x: canvas.width + i * (H_GAP),
+        y: pipeLoc(),
+        scored: false
+      }));
+      paused = false;
+      pauseOverlay.classList.remove('active');
+      updateHUD();
+    };
 
-      // set initial flyHeight (middle of screen - size of the bird)
-      flyHeight = (canvas.height / 2) - (size[1] / 2);
+    const updateHUD = () => {
+      document.getElementById('bestScore').textContent = `Best : ${bestScore}`;
+      document.getElementById('currentScore').textContent = `Current : ${currentScore}`;
+      pauseBtn.disabled = !gamePlaying;
+      pauseBtn.textContent = paused ? '▶' : '⏸';
+    };
 
-      // setup first 3 pipes
-      pipes = Array(3).fill().map((a, i) => [canvas.width + (i * (pipeGap + pipeWidth)), pipeLoc()]);
-    }
+    const drawBackground = () => {
+      // Два слоя фона для бесшовной прокрутки
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height, -bgOffset + canvas.width, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height, -bgOffset, 0, canvas.width, canvas.height);
+    };
 
-    const render = () => {
-      // make the pipe and bird moving 
-      index++;
+    const drawPipes = () => {
+      for (const p of pipes) {
+        // Верхняя труба
+        ctx.drawImage(img, 432, 588 - p.y, PIPE_WIDTH, p.y, p.x, 0, PIPE_WIDTH, p.y);
+        // Нижняя труба
+        const bottomH = canvas.height - p.y + GAP_Y;
+        ctx.drawImage(img, 432 + PIPE_WIDTH, 108, PIPE_WIDTH, bottomH, p.x, p.y + GAP_Y, PIPE_WIDTH, bottomH);
+      }
+    };
 
-      // ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drawBird = (time) => {
+      // Анимация крыльев
+      const wingFrame = Math.floor(((time / 1000) * 12) % 3);
+      const spriteY = wingFrame * size[1];
 
-      // background first part 
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height, -((index * (speed / 2)) % canvas.width) + canvas.width, 0, canvas.width, canvas.height);
-      // background second part
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height, -(index * (speed / 2)) % canvas.width, 0, canvas.width, canvas.height);
-      
-      // pipe display
-      if (gamePlaying){
-        pipes.map(pipe => {
-          // pipe moving
-          pipe[0] -= speed;
+      // Наклон зависит от вертикальной скорости
+      const tilt = Math.max(-0.6, Math.min(0.9, bird.vy / MAX_FALL_SPEED)) * 0.9;
 
-          // top pipe
-          ctx.drawImage(img, 432, 588 - pipe[1], pipeWidth, pipe[1], pipe[0], 0, pipeWidth, pipe[1]);
-          // bottom pipe
-          ctx.drawImage(img, 432 + pipeWidth, 108, pipeWidth, canvas.height - pipe[1] + pipeGap, pipe[0], pipe[1] + pipeGap, pipeWidth, canvas.height - pipe[1] + pipeGap);
+      ctx.save();
+      ctx.translate(bird.x + size[0] / 2, bird.y + size[1] / 2);
+      ctx.rotate(tilt);
+      ctx.drawImage(img, 432, spriteY, size[0], size[1], -size[0] / 2, -size[1] / 2, size[0], size[1]);
+      ctx.restore();
+    };
 
-          // give 1 point & create new pipe
-          if(pipe[0] <= -pipeWidth){
+    const checkCollisions = () => {
+      // Столкновения с трубами
+      for (const p of pipes) {
+        const inX = bird.x < p.x + PIPE_WIDTH && bird.x + size[0] > p.x;
+        if (inX) {
+          const hitTop = bird.y < p.y;
+          const hitBottom = (bird.y + size[1]) > (p.y + GAP_Y);
+          if (hitTop || hitBottom) return true;
+        }
+      }
+      // Пол
+      if (bird.y >= canvas.height - size[1] - 1) return true;
+      // Верх
+      if (bird.y <= 0) return true;
+      return false;
+    };
+
+    const flap = () => {
+      if (!gamePlaying) {
+        // старт игры
+        gamePlaying = true;
+        paused = false;
+        bird.vy = JUMP_VELOCITY;
+      } else if (!paused) {
+        // обычный взмах
+        bird.vy = JUMP_VELOCITY;
+      }
+      updateHUD();
+    };
+
+    const togglePause = () => {
+      if (!gamePlaying) return;
+      paused = !paused;
+      pauseOverlay.classList.toggle('active', paused);
+      updateHUD();
+    };
+
+    function render(time) {
+      if (!lastTime) lastTime = time;
+      let dt = (time - lastTime) / 1000;
+      // ограничиваем dt чтобы не было скачков после сворачивания вкладки
+      if (dt > 0.033) dt = 0.033;
+      lastTime = time;
+
+      // Логика
+      if (gamePlaying && !paused) {
+        // фон
+        bgOffset = (bgOffset + (SPEED * 0.5) * dt) % canvas.width;
+
+        // трубы
+        for (const p of pipes) {
+          p.x -= SPEED * dt;
+          // начисляем очко, когда труба прошла левее птицы
+          if (!p.scored && p.x + PIPE_WIDTH < bird.x) {
+            p.scored = true;
             currentScore++;
-            // check if it's the best score
             bestScore = Math.max(bestScore, currentScore);
-            
-            // remove & create new pipe
-            pipes = [...pipes.slice(1), [pipes[pipes.length-1][0] + pipeGap + pipeWidth, pipeLoc()]];
-            console.log(pipes);
           }
+        }
+        // переиспользуем трубы
+        if (pipes[0].x < -PIPE_WIDTH) {
+          const lastX = pipes[pipes.length - 1].x;
+          pipes = [...pipes.slice(1), { x: lastX + H_GAP, y: pipeLoc(), scored: false }];
+        }
 
-          // if hit the pipe, end
-          if ([
-            pipe[0] <= cTenth + size[0], 
-            pipe[0] + pipeWidth >= cTenth, 
-            pipe[1] > flyHeight || pipe[1] + pipeGap < flyHeight + size[1]
-          ].every(elem => elem)) {
-            gamePlaying = false;
-            setup();
-          }
-        })
+        // физика птицы
+        bird.vy = Math.min(bird.vy + GRAVITY * dt, MAX_FALL_SPEED);
+        bird.y = Math.min(Math.max(bird.y + bird.vy * dt, 0), canvas.height - size[1]);
+
+        // столкновения
+        if (checkCollisions()) {
+          gamePlaying = false;
+          paused = false;
+          setup();
+        }
       }
-      // draw bird
-      if (gamePlaying) {
-        ctx.drawImage(img, 432, Math.floor((index % 9) / 3) * size[1], ...size, cTenth, flyHeight, ...size);
-        flight += gravity;
-        flyHeight = Math.min(flyHeight + flight, canvas.height - size[1]);
-      } else {
-        ctx.drawImage(img, 432, Math.floor((index % 9) / 3) * size[1], ...size, ((canvas.width / 2) - size[0] / 2), flyHeight, ...size);
-        flyHeight = (canvas.height / 2) - (size[1] / 2);
-          // text accueil
-        ctx.fillText(`Best score : ${bestScore}`, 85, 245);
-        ctx.fillText('Click to play', 90, 535);
+
+      // Рендер
+      drawBackground();
+      drawPipes();
+      drawBird(time);
+
+      // Оверлеи текста
+      if (!gamePlaying) {
+        ctx.fillStyle = '#000';
         ctx.font = "bold 30px courier";
+        ctx.fillText(`Best score : ${bestScore}`, 85, 245);
+        ctx.fillText('Click or Space', 78, 505);
+        ctx.fillText('to play', 150, 545);
+      } else if (paused) {
+        // затемнение поверх канваса делается оверлеем в DOM (pauseOverlay)
+        // здесь можно дополнительно что-то рисовать, если нужно
       }
 
-      document.getElementById('bestScore').innerHTML = `Best : ${bestScore}`;
-      document.getElementById('currentScore').innerHTML = `Current : ${currentScore}`;
-
-      // tell the browser to perform anim
-      window.requestAnimationFrame(render);
+      updateHUD();
+      requestAnimationFrame(render);
     }
 
-    // launch setup
-    setup();
-    img.onload = render;
+    // Слушатели
+    pauseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePause();
+    });
+    resumeBtn.addEventListener('click', () => {
+      if (!gamePlaying) return;
+      paused = false;
+      pauseOverlay.classList.remove('active');
+      updateHUD();
+    });
 
-    // start game
-    document.addEventListener('click', () => gamePlaying = true);
-    window.onclick = () => flight = jump;
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      flap();
+    }, { passive: false });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        flap();
+      } else if (e.code === 'KeyP' || e.code === 'Escape') {
+        e.preventDefault();
+        togglePause();
+      }
+    });
+
+    // Запуск
+    setup();
+    img.onload = () => requestAnimationFrame(render);
   </script>
 </body>
 </html>

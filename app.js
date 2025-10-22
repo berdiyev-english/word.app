@@ -46,8 +46,19 @@ class EnglishWordsApp {
   cleanWordForAudio(raw) {
     if (!raw) return '';
     const w = String(raw).toLowerCase().trim();
+    // keep letters, apostrophes, hyphen and spaces (for phrasals)
     const basic = w.replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
     return basic;
+  }
+  sanitizeForSpeech(raw) {
+    if (!raw) return '';
+    // remove arrows and any punctuation except hyphen/apostrophe/spaces
+    return String(raw)
+      .toLowerCase()
+      .replace(/→/g, ' ')
+      .replace(/[^a-z\s'-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
   buildAudioCandidates(baseWord) {
     const cleaned = this.cleanWordForAudio(baseWord);
@@ -124,12 +135,14 @@ class EnglishWordsApp {
     });
   }
   async playSpeechFallback(word) {
-    if ('speechSynthesis' in window && this.isEnglish(word)) {
+    const text = this.sanitizeForSpeech(word);
+    if (!text) return false;
+    if ('speechSynthesis' in window && this.isEnglish(text)) {
       try {
         await new Promise((resolve) => {
-          const u = new SpeechSynthesisUtterance(word);
+          const u = new SpeechSynthesisUtterance(text);
           u.lang = 'en-US';
-          u.rate = 0.85;
+          u.rate = 0.9; // per request
           u.onend = resolve;
           window.speechSynthesis.cancel();
           window.speechSynthesis.speak(u);
@@ -139,7 +152,7 @@ class EnglishWordsApp {
     }
     return false;
   }
-  // Core play single word (mp3). Default prefer US, fallback UK, then speechSynthesis; resolves after finish
+  // Core play single word (mp3). Prefer WoorDhunt; fallback to speech only if mp3 fails
   async playSingleWordMp3(word, regionPreferred = 'us') {
     const candidates = this.buildAudioCandidates(word);
     if (candidates.length === 0) return this.playSpeechFallback(word);
@@ -190,10 +203,9 @@ class EnglishWordsApp {
   // Image helpers
   // =========================
   getPrimaryImageUrl(wordObj) {
-    const base = this.getBaseEnglish(wordObj) || '';
-    const clean = String(base).trim();
-    // источник: britlex с encodeURIComponent
-    return `https://britlex.ru/images/${encodeURIComponent(clean)}.jpg`;
+    const base = (this.getBaseEnglish(wordObj) || '').toLowerCase().trim();
+    // источник: britlex (нужен lower-case + encodeURIComponent)
+    return `https://britlex.ru/images/${encodeURIComponent(base)}.jpg`;
   }
   getFallbackImageUrl() {
     const n = Math.floor(Math.random() * 100) + 1;
@@ -211,15 +223,11 @@ class EnglishWordsApp {
     imgEl.src = 'nophoto.jpg';
   }
   handleMotivationImageError(imgEl) {
-    // Сначала пробуем мотивацию из папки /motivation/, затем — из корня, затем nophoto
+    // Сначала пробуем mN.jpg из корня, затем nophoto
     if (!imgEl.dataset.step) {
       imgEl.dataset.step = '1';
       const current = imgEl.dataset.index || '1';
-      imgEl.src = `${current}.jpg`;
-      return;
-    } else if (imgEl.dataset.step === '1') {
-      imgEl.dataset.step = '2';
-      imgEl.src = 'nophoto.jpg';
+      imgEl.src = `m${current}.jpg`;
       return;
     } else {
       imgEl.onerror = null;
@@ -427,6 +435,9 @@ class EnglishWordsApp {
   switchSection(section) {
     this.currentSection = section;
 
+    // Stop any ongoing audio when switching sections to avoid stray playback (like 'airport')
+    this.stopCurrentAudio();
+
     document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
     const targetSection = document.getElementById(section);
     if (targetSection) {
@@ -464,6 +475,9 @@ class EnglishWordsApp {
   }
 
   showLevelWords(level) {
+    // cancel any audio on entering lists
+    this.stopCurrentAudio();
+
     this.currentLevel = level;
     this.currentCategory = null;
 
@@ -487,6 +501,9 @@ class EnglishWordsApp {
   }
 
   showCategoryWords(category) {
+    // cancel any audio on entering lists
+    this.stopCurrentAudio();
+
     this.currentCategory = category;
     this.currentLevel = null;
 
@@ -512,6 +529,7 @@ class EnglishWordsApp {
   }
 
   backToLevels() {
+    this.stopCurrentAudio();
     const container = document.getElementById('wordsContainer');
     if (container) container.classList.add('hidden');
     this.currentLevel = null;
@@ -569,6 +587,9 @@ class EnglishWordsApp {
   // Learning list
   // =========
   addWordToLearning(word, translation, level, forms = null) {
+    // ensure no stray voice like "airport"
+    this.stopCurrentAudio();
+
     const existingWord = this.learningWords.find(w => w.word === word && w.level === level);
     if (!existingWord) {
       const newWord = { word, translation, level, forms: forms || null, isLearned: false, addedAt: Date.now() };
@@ -584,6 +605,9 @@ class EnglishWordsApp {
     }
   }
   removeWordFromLearning(word, level) {
+    // ensure no stray voice like "airport"
+    this.stopCurrentAudio();
+
     const index = this.learningWords.findIndex(w => w.word === word && w.level === level);
     if (index !== -1) {
       this.learningWords.splice(index, 1);
@@ -597,6 +621,9 @@ class EnglishWordsApp {
     }
   }
   addAllLevelWords() {
+    // ensure no stray voice
+    this.stopCurrentAudio();
+
     const source = this.currentLevel || this.currentCategory;
     if (!source) return;
 
@@ -629,6 +656,9 @@ class EnglishWordsApp {
     }
   }
   removeAllLevelWords() {
+    // ensure no stray voice
+    this.stopCurrentAudio();
+
     const source = this.currentLevel || this.currentCategory;
     if (!source) return;
 
@@ -659,6 +689,9 @@ class EnglishWordsApp {
   // Add words
   // =========
   addSingleWord() {
+    // ensure no stray voice
+    this.stopCurrentAudio();
+
     const wordInput = document.getElementById('newWord');
     const translationInput = document.getElementById('newTranslation');
     const levelSelect = document.getElementById('newLevel');
@@ -702,6 +735,9 @@ class EnglishWordsApp {
 
   // Mass add with robust parsing
   bulkAddWords() {
+    // ensure no stray voice
+    this.stopCurrentAudio();
+
     const textarea = document.getElementById('bulkTextarea');
     const levelSelect = document.getElementById('bulkLevel');
     if (!textarea || !levelSelect) return;
@@ -801,6 +837,9 @@ class EnglishWordsApp {
     `).join('');
   }
   deleteCustomWord(word) {
+    // ensure no stray voice
+    this.stopCurrentAudio();
+
     this.customWords = this.customWords.filter(w => w.word !== word);
     this.learningWords = this.learningWords.filter(w => !(w.word === word && w.isCustom));
     this.saveData();
@@ -838,61 +877,75 @@ class EnglishWordsApp {
       this.renderWordsList();
     }
 
-    // Вставить панель мотивации поверх контента
-    this.insertMotivationPanel(container);
+    // Вставить кнопку поддержки (мотивации) поверх контента
+    this.insertMotivationButton(container);
   }
 
   // =========
-  // Motivation UI
+  // Motivation UI (popup)
   // =========
-  insertMotivationPanel(containerEl) {
+  insertMotivationButton(containerEl) {
     if (!containerEl) return;
-    if (containerEl.querySelector('#motivationBar')) return; // уже вставлено
+    if (containerEl.querySelector('#motivationBtn')) return; // уже есть
 
-    const bar = document.createElement('div');
-    bar.id = 'motivationBar';
-    bar.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:14px;';
+    const btn = document.createElement('button');
+    btn.id = 'motivationBtn';
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'хочу поддержки 😞';
+    btn.style.cssText = 'font-weight:700;margin-bottom:14px;';
+    btn.addEventListener('click', () => this.showMotivationPopup());
 
-    const getBtn = document.createElement('button');
-    getBtn.className = 'btn btn-primary';
-    getBtn.textContent = 'получить';
-    getBtn.style.cssText = 'font-weight:700;';
-    getBtn.addEventListener('click', () => this.showMotivation(containerEl));
-
-    const label = document.createElement('span');
-    label.textContent = 'ежедневная мотивация';
-    label.style.cssText = 'font-weight:700;color:var(--text-primary);';
-
-    bar.appendChild(getBtn);
-    bar.appendChild(label);
-
-    containerEl.insertAdjacentElement('afterbegin', bar);
+    containerEl.insertAdjacentElement('afterbegin', btn);
   }
-  showMotivation(containerEl) {
-    let box = containerEl.querySelector('#motivationBox');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'motivationBox';
-      box.style.cssText = 'background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;padding:12px;margin-bottom:14px;';
-      containerEl.insertAdjacentElement('afterbegin', box);
-    }
+  showMotivationPopup() {
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'motivationOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:1000002;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    // Modal container
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--bg-primary);border-radius:16px;padding:16px;max-width:800px;width:90%;max-height:90vh;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:12px;';
+
+    // Header with title and close
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;';
+
+    const title = document.createElement('div');
+    title.textContent = 'ТВОЯ МОТИВАЦИЯ НА СЕГОДНЯ :';
+    title.style.cssText = 'font-weight:900;font-size:18px;color:var(--text-primary);';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-secondary';
+    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    closeBtn.onclick = () => overlay.remove();
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // Image area
     const n = Math.floor(Math.random() * 61) + 1;
-    const title = `<div style="font-weight:900;font-size:18px;margin-bottom:10px;color:var(--text-primary);">ТВОЯ МОТИВАЦИЯ НА СЕГОДНЯ :</div>`;
-    // сначала пробуем /motivation/n.jpg, при ошибке - n.jpg, затем nophoto.jpg
-    const img = `
-      <div style="width:100%;display:flex;align-items:center;justify-content:center;">
-        <img 
-          src="motivation/${n}.jpg" 
-          data-index="${n}" 
-          alt="motivation" 
-          style="max-width:100%;height:auto;object-fit:contain;display:block;"
-          onerror="app.handleMotivationImageError(this)"
-        />
-      </div>
-    `;
-    box.innerHTML = title + img;
-    // прокрутить к мотивации, чтобы видеть полностью
-    setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    const imgWrap = document.createElement('div');
+    imgWrap.style.cssText = 'width:100%;display:flex;align-items:center;justify-content:center;';
+
+    const img = document.createElement('img');
+    img.alt = 'motivation';
+    // сначала пробуем motivation/mN.jpg, затем mN.jpg
+    img.src = `motivation/m${n}.jpg`;
+    img.setAttribute('data-index', String(n));
+    img.style.cssText = 'max-width:100%;max-height:70vh;height:auto;object-fit:contain;display:block;border-radius:10px;';
+    img.onerror = () => this.handleMotivationImageError(img);
+
+    imgWrap.appendChild(img);
+
+    modal.appendChild(header);
+    modal.appendChild(imgWrap);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
   }
 
   // =========
@@ -959,7 +1012,7 @@ class EnglishWordsApp {
       </div>
     `;
 
-    // Autoplay: если фронт на английском — сразу озвучка
+    // Autoplay: если фронт на английском — сразу озвучка (WoorDhunt-first)
     if (!this.lastFlashcardFrontWasRussian) {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -1081,6 +1134,7 @@ class EnglishWordsApp {
       </div>
     `;
 
+    // Автопроизношение только на «Изучаю»: EN-вопрос — сразу (WoorDhunt-first)
     if (direction === 'EN_RU') {
       setTimeout(() => {
         if (word.forms && word.forms.length) this.playFormsSequence(word.forms, 'us');
@@ -1151,6 +1205,7 @@ class EnglishWordsApp {
     const wordsToReview = this.getWordsToReview();
     const wordObj = wordsToReview.find(w => w.word === wordToPlay);
 
+    // RU_EN — после ответа: WoorDhunt-first, fallback speech
     if (direction === 'RU_EN') {
       setTimeout(() => {
         if (wordObj && wordObj.forms && wordObj.forms.length > 0) {

@@ -3,130 +3,92 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>2048 — Mobile Perf</title>
+<title>2048 — Mobile Perf (точное выравнивание без обрезания)</title>
 <style>
   :root {
-  --gap: 12px;
-  --radius: 12px;
-  --board-bg: #bbada0;
-  --cell-bg: rgba(238, 228, 218, 0.35);
-  --page-bg: #0f1217;
-  --anim: 90ms;
-  --ease: cubic-bezier(.2,.8,.2,1);
-  --y-fix: 2px; /* опускаем плитки чуть ниже; попробуй 1–3px под свой экран */
-}
-  @media (prefers-reduced-motion: reduce) {
-    :root { --anim: 0ms; }
+    --gap: 12px;
+    --radius: 12px;
+    --board-bg: #bbada0;              /* бежевая подложка */
+    --cell-bg: rgba(238, 228, 218, .35); /* прозрачные клетки сетки */
+    --page-bg: #0f1217;
+    --anim: 90ms;
+    --ease: cubic-bezier(.2,.8,.2,1);
   }
+  @media (prefers-reduced-motion: reduce) { :root { --anim: 0ms; } }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
-  body {
-    margin: 0;
-    color: #e8e8e8;
-    background: var(--page-bg);
-    font: 600 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
-    display: grid;
-    place-items: center;
-    padding: 16px;
+  body{
+    margin:0; color:#e8e8e8; background:var(--page-bg);
+    font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    display:grid; place-items:center; padding:16px;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    overflow-x:hidden;
   }
-  .wrap { width: min(96vw, 520px); }
-  .topbar {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
-    margin-bottom: 12px;
+  .wrap{ width:min(96vw,520px); }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .brand{ font-size:20px; font-weight:900; letter-spacing:.02em; }
+  .scores{ display:flex; gap:8px; }
+  .badge{
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+    padding:6px 10px; border-radius:10px; min-width:90px; text-align:center; font-weight:800;
   }
-  .brand { font-size: 20px; font-weight: 900; letter-spacing: .02em; }
-  .scores { display: flex; gap: 8px; }
-  .badge {
-    background: rgba(255,255,255,.06);
-    border: 1px solid rgba(255,255,255,.12);
-    padding: 6px 10px;
-    border-radius: 10px;
-    min-width: 90px;
-    text-align: center;
-    font-weight: 800;
+  .badge b{ display:block; color:#ffd54f; font-size:18px; margin-top:2px; line-height:1; }
+  .controls{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  button,select{
+    background:rgba(255,255,255,.08); color:#fff; border:1px solid rgba(255,255,255,.12);
+    border-radius:10px; padding:8px 12px; font-weight:800; cursor:pointer; -webkit-tap-highlight-color:transparent;
   }
-  .badge b { display: block; color: #ffd54f; font-size: 18px; margin-top: 2px; }
-  .controls {
-    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;
-  }
-  button, select {
-    background: rgba(255,255,255,.08);
-    color: #fff; border: 1px solid rgba(255,255,255,.12);
-    border-radius: 10px; padding: 8px 12px;
-    font-weight: 800; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  button:hover { background: rgba(255,255,255,.12); }
-  button:active { transform: translateY(1px); }
-  .hint { opacity: .8; margin: 6px 0 10px; }
+  button:hover{ background:rgba(255,255,255,.12); }
+  button:active{ transform:translateY(1px); }
+  .hint{ opacity:.8; margin:6px 0 10px; }
 
-  .board {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 1/1;
-    background: var(--board-bg);
-    border-radius: calc(var(--radius) + 4px);
-    padding: var(--gap);
-    user-select: none;
-    touch-action: none;
-    contain: content; /* изоляция перерисовок */
+  /* Доска: квадрат 1:1; padding даёт отступ до сетки. overflow: hidden — чтобы углы не «торчали» */
+  .board{
+    position:relative; width:100%; aspect-ratio:1/1;
+    background:var(--board-bg); border-radius:calc(var(--radius) + 4px);
+    padding:var(--gap); user-select:none; touch-action:none; overflow:hidden;
   }
-  .grid, .tiles { position: absolute; inset: var(--gap); }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(var(--size), 1fr);
-    grid-auto-rows: 1fr;
-    gap: var(--gap);
-    height: 100%;
+  /* Слои сетки и тайлов совпадают геометрически: абсолют и inset равен padding */
+  .grid,.tiles{ position:absolute; inset:var(--gap); }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(var(--size),1fr);
+    grid-auto-rows:1fr;
+    gap:var(--gap);
+    width:100%; height:100%;
   }
-  .cell {
-    background: var(--cell-bg);
-    border-radius: var(--radius);
+  .cell{ background:var(--cell-bg); border-radius:var(--radius); }
+
+  .tiles{ pointer-events:none; }
+
+  /* Тайлы — ставим точно по пиксельным координатам ячеек, анимируем только transform */
+  .tile{
+    position:absolute; border-radius:var(--radius);
+    display:grid; place-items:center;
+    font-weight:900; line-height:1;
+    width:var(--w,0px); height:var(--h,0px);
+    transform:translate3d(var(--tx,0), var(--ty,0), 0) scale(var(--s,1));
+    transition:transform var(--anim) var(--ease);
+    backface-visibility:hidden; will-change:transform;
   }
-  .tiles {
-    pointer-events: none;
-    will-change: transform;
+  .tile.bump{ animation:bump var(--anim) ease-out; }
+  @keyframes bump{
+    0%{   transform:translate3d(var(--tx), var(--ty), 0) scale(1); }
+    50%{  transform:translate3d(var(--tx), var(--ty), 0) scale(1.11); }
+    100%{ transform:translate3d(var(--tx), var(--ty), 0) scale(1); }
   }
 
-  .tile {
-    position: absolute;
-    border-radius: var(--radius);
-    display: grid; place-items: center;
-    font-weight: 900;
-    /* только GPU-композитинг */
-    transform: translate3d(var(--tx,0), calc(var(--ty,0) + var(--y-fix,0px)), 0) scale(var(--s,1));
-    transition: transform var(--anim) var(--ease);
-    will-change: transform;
-    backface-visibility: hidden;
-    contain: layout paint style;
+  .overlay{
+    position:absolute; inset:0; display:none; place-items:center;
+    background:rgba(0,0,0,.35); border-radius:calc(var(--radius) + 4px);
   }
-  .tile.bump {
-    animation: bump var(--anim) ease-out;
+  .overlay.show{ display:grid; }
+  .panel{
+    background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.15);
+    padding:14px 16px; border-radius:12px; text-align:center; font-weight:800; min-width:60%;
   }
-@keyframes bump {
-  0%   { transform: translate3d(var(--tx), calc(var(--ty) + var(--y-fix,0px)), 0) scale(1); }
-  50%  { transform: translate3d(var(--tx), calc(var(--ty) + var(--y-fix,0px)), 0) scale(1.11); }
-  100% { transform: translate3d(var(--tx), calc(var(--ty) + var(--y-fix,0px)), 0) scale(1); }
-}
-
-  .overlay {
-    position: absolute; inset: 0;
-    display: none; place-items: center;
-    background: rgba(0,0,0,.35);
-    border-radius: calc(var(--radius) + 4px);
-  }
-  .overlay.show { display: grid; }
-  .panel {
-    background: rgba(0,0,0,.55);
-    border: 1px solid rgba(255,255,255,.15);
-    padding: 14px 16px;
-    border-radius: 12px;
-    text-align: center;
-    font-weight: 800;
-    min-width: 60%;
-  }
-  .panel .title { font-size: 20px; margin-bottom: 6px; }
-  .panel .row { margin-top: 8px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .panel .title{ font-size:20px; margin-bottom:6px; }
+  .panel .row{ margin-top:8px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -193,9 +155,9 @@
   const btnUndo = document.getElementById('undo');
   const winOv   = document.getElementById('winOv');
   const loseOv  = document.getElementById('loseOv');
-  const btnContinue = document.getElementById('continue');
-  const btnNewFromWin = document.getElementById('newFromWin');
-  const btnRestart = document.getElementById('restart');
+  const btnContinue  = document.getElementById('continue');
+  const btnNewFromWin= document.getElementById('newFromWin');
+  const btnRestart   = document.getElementById('restart');
 
   // State
   let size = parseInt(localStorage.getItem('2048-size') || '4', 10);
@@ -205,28 +167,87 @@
   let tiles = []; // {id,x,y,value, merged, scale}
   let idSeq = 1;
   let score = 0;
-  let best = parseInt(localStorage.getItem('2048-best') || '0', 10);
+  let best  = parseInt(localStorage.getItem('2048-best') || '0', 10);
   bestEl.textContent = best;
 
-  let keepPlaying = false;
-  let won = false;
-  let over = false;
-  let moveLock = false; // блок входа на время анимации
-
+  let keepPlaying = false, won = false, over = false, moveLock = false;
   let undoState = null;
 
-  // Metrics
-  const GAP = 12;
-  let cell = 0;
-  function computeCell() {
-    const inner = tilesEl.getBoundingClientRect().width;
-    if (inner > 0) cell = (inner - GAP * (size - 1)) / size;
-    else cell = (boardEl.clientWidth - GAP*2 - GAP*(size-1)) / size;
-    if (!Number.isFinite(cell) || cell <= 0) cell = 64; // фолбек
+  // Получаем точные координаты и размеры ячейки (x,y) из DOM,
+  // чтобы исключить любые погрешности и обрезания справа/снизу.
+  function cellRect(x, y) {
+    const idx = y * size + x;
+    const cell = gridEl.children[idx];
+    const cr = cell.getBoundingClientRect();
+    const tr = tilesEl.getBoundingClientRect();
+    return {
+      tx: cr.left - tr.left,
+      ty: cr.top  - tr.top,
+      w:  cr.width,
+      h:  cr.height
+    };
   }
-  window.addEventListener('resize', () => { computeCell(); layoutTiles(); });
 
-  // Utils
+  function styleTile(t, spawn=false, bump=false) {
+    const el = tilesEl.querySelector(`.tile[data-id="${t.id}"]`);
+    if (!el) return;
+
+    const r = cellRect(t.x, t.y);
+    el.style.setProperty('--tx', r.tx + 'px');
+    el.style.setProperty('--ty', r.ty + 'px');
+    el.style.setProperty('--w',  r.w  + 'px');
+    el.style.setProperty('--h',  r.h  + 'px');
+    el.style.setProperty('--s',  spawn ? (t.scale ?? 1) : 1);
+
+    if (t._needsText) {
+      el.textContent = t.value;
+      const { bg, color } = valueStyle(t.value);
+      el.style.background = bg;
+      el.style.color = color;
+      const base = Math.min(r.w, r.h);
+      el.style.fontSize = (fontSizeK(t.value) * base) + 'px';
+      t._needsText = false;
+    }
+
+    if (bump) {
+      el.style.animation = 'none';
+      requestAnimationFrame(() => {
+        el.style.animation = '';
+        el.classList.add('bump');
+        const clear = () => { el.classList.remove('bump'); el.removeEventListener('animationend', clear); };
+        el.addEventListener('animationend', clear);
+      });
+    }
+  }
+
+  function layoutTiles() {
+    for (const t of tiles) styleTile(t, false, false);
+  }
+
+  // Создание DOM-элемента тайла
+  function createTileEl(t) {
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.dataset.id = t.id;
+    tilesEl.appendChild(el);
+    styleTile(t, true);
+  }
+  function removeTileEl(t) {
+    const el = tilesEl.querySelector(`.tile[data-id="${t.id}"]`);
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }
+
+  // Сетка
+  function setupGridCells() {
+    gridEl.innerHTML = '';
+    for (let i=0;i<size*size;i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      gridEl.appendChild(cell);
+    }
+  }
+
+  // Утилиты
   const inBounds = (x,y) => x>=0 && x<size && y>=0 && y<size;
   const VECTORS = { left:{x:-1,y:0}, right:{x:1,y:0}, up:{x:0,y:-1}, down:{x:0,y:1} };
   const valueStyle = (v) => {
@@ -239,15 +260,6 @@
   };
   const fontSizeK = (v) => v < 100 ? .42 : v < 1000 ? .38 : v < 10000 ? .33 : .30;
 
-  // Grid helpers
-  function setupGridCells() {
-    gridEl.innerHTML = '';
-    for (let i=0;i<size*size;i++) {
-      const cellEl = document.createElement('div');
-      cellEl.className = 'cell';
-      gridEl.appendChild(cellEl);
-    }
-  }
   function getGrid() {
     const g = Array.from({length:size}, () => Array(size).fill(null));
     for (const t of tiles) g[t.x][t.y] = t;
@@ -259,53 +271,7 @@
     return arr;
   }
 
-  // Tile DOM
-  function createTileEl(t) {
-    const el = document.createElement('div');
-    el.className = 'tile';
-    el.dataset.id = t.id;
-    tilesEl.appendChild(el);
-    styleTile(t, true);
-  }
-  function qTileEl(t) { return tilesEl.querySelector(`.tile[data-id="${t.id}"]`); }
-  function styleTile(t, spawn=false, bump=false) {
-    const el = qTileEl(t); if (!el) return;
-    el.style.width = el.style.height = cell + 'px';
-    const tx = t.x * (cell + GAP);
-    const ty = t.y * (cell + GAP);
-    el.style.setProperty('--tx', tx+'px');
-    el.style.setProperty('--ty', ty+'px');
-    el.style.setProperty('--s', spawn ? (t.scale ?? 1) : 1);
-
-    if (t._needsText) {
-      el.textContent = t.value;
-      const { bg, color } = valueStyle(t.value);
-      el.style.background = bg;
-      el.style.color = color;
-      el.style.fontSize = (fontSizeK(t.value) * cell) + 'px';
-      t._needsText = false;
-    }
-    if (bump) {
-      // Без reflow: сбрасываем анимацию через inline-style
-      el.style.animation = 'none';
-      requestAnimationFrame(() => {
-        el.style.animation = '';
-        el.classList.add('bump');
-        // убрать класс после завершения, чтобы не копилось
-        const clear = () => { el.classList.remove('bump'); el.removeEventListener('animationend', clear); };
-        el.addEventListener('animationend', clear);
-      });
-    }
-  }
-  function layoutTiles() {
-    for (const t of tiles) styleTile(t, false, false);
-  }
-  function removeTileEl(t) {
-    const el = qTileEl(t);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
-  }
-
-  // Score
+  // Счёт
   function setScore(val) {
     score = val; scoreEl.textContent = score;
     if (score > best) {
@@ -315,20 +281,7 @@
   }
   function addScore(delta) { setScore(score + delta); }
 
-  // Game
-  function reset() {
-    tiles = []; idSeq = 1; over = false; won = false; keepPlaying = false; moveLock = false;
-    setScore(0);
-    tilesEl.innerHTML = '';
-    winOv.classList.remove('show'); loseOv.classList.remove('show');
-    setupGridCells();
-    computeCell();
-
-    spawnRandom(true);
-    spawnRandom(true);
-    saveUndo();
-  }
-
+  // Спавн
   function spawnRandom(spawn=false) {
     const empties = emptyCells();
     if (!empties.length) return false;
@@ -343,6 +296,9 @@
     });
     return true;
   }
+
+  // Движение
+  const ANIM_MS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--anim')) || 0;
 
   function buildTraversals(vec) {
     const xs = [...Array(size).keys()];
@@ -369,8 +325,6 @@
     return false;
   }
 
-  const ANIM_MS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--anim')) || 0;
-
   function move(dir) {
     if (over || moveLock) return;
     moveLock = true;
@@ -378,10 +332,8 @@
     const vec = VECTORS[dir];
     const { xs, ys } = buildTraversals(vec);
     const grid = getGrid();
-    let moved = false;
-    let gained = 0;
-    const toRemove = new Set();
-    const toBump = [];
+    let moved = false, gained = 0;
+    const toRemove = new Set(), toBump = [];
 
     for (const t of tiles) t.merged = false;
 
@@ -393,16 +345,13 @@
       const n = inBounds(next.x,next.y) ? grid[next.x][next.y] : null;
 
       if (n && n.value === t.value && !n.merged) {
-        // merge t into n-position (we store result in t)
         grid[t.x][t.y] = null;
         t.x = next.x; t.y = next.y;
         t.value *= 2; t.merged = true; t._needsText = true;
         grid[next.x][next.y] = t;
 
         toRemove.add(n);
-        moved = true;
-        gained += t.value;
-        toBump.push(t);
+        moved = true; gained += t.value; toBump.push(t);
       } else {
         if (farthest.x !== t.x || farthest.y !== t.y) {
           grid[t.x][t.y] = null;
@@ -415,19 +364,16 @@
 
     if (!moved) { moveLock = false; return; }
 
-    // Remove merged counterparts from model + DOM
     if (toRemove.size) {
       tiles = tiles.filter(t => !toRemove.has(t));
       for (const r of toRemove) removeTileEl(r);
     }
 
-    // Batch style updates in rAF
     requestAnimationFrame(() => {
       for (const t of tiles) styleTile(t, false, false);
       for (const t of toBump) styleTile(t, false, true);
     });
 
-    // After anim ends: spawn new and checks
     setTimeout(() => {
       if (gained) addScore(gained);
       if (tiles.some(t => t.value === 2048) && !keepPlaying) {
@@ -441,12 +387,9 @@
     }, ANIM_MS);
   }
 
-  // Undo (single step)
+  // Undo
   function saveUndo() {
-    undoState = {
-      tiles: tiles.map(t => ({...t})),
-      score, won, keepPlaying, over
-    };
+    undoState = { tiles: tiles.map(t => ({...t})), score, won, keepPlaying, over };
   }
   function undo() {
     if (!undoState || moveLock) return;
@@ -455,7 +398,8 @@
     won = undoState.won; keepPlaying = undoState.keepPlaying; over = undoState.over;
     tilesEl.innerHTML = '';
     for (const t of tiles) { t._needsText = true; createTileEl(t); }
-    layoutTiles();
+    // после восстановления измеряем и раскладываем
+    requestAnimationFrame(() => requestAnimationFrame(layoutTiles));
     winOv.classList.toggle('show', won && !keepPlaying);
     loseOv.classList.toggle('show', over);
   }
@@ -478,25 +422,23 @@
     if (c === 'KeyN' || c === 'KeyR') { e.preventDefault(); restart(); }
   }, { passive: false });
 
-  // Touch swipes (fast + passive)
+  // Touch swipes
   let sx=0, sy=0, st=0;
   boardEl.addEventListener('touchstart', (e) => {
-    const t = e.changedTouches[0];
-    sx=t.clientX; sy=t.clientY; st=performance.now();
+    const t = e.changedTouches[0]; sx=t.clientX; sy=t.clientY; st=performance.now();
   }, {passive:true});
   boardEl.addEventListener('touchend', (e) => {
     const t = e.changedTouches[0];
     const dx=t.clientX-sx, dy=t.clientY-sy, dt=performance.now()-st;
     const thr=24; if (dt>800) return;
     if (Math.abs(dx)<thr && Math.abs(dy)<thr) return;
-    if (Math.abs(dx)>Math.abs(dy)) move(dx>0?'right':'left');
-    else move(dy>0?'down':'up');
+    if (Math.abs(dx)>Math.abs(dy)) move(dx>0?'right':'left'); else move(dy>0?'down':'up');
   }, {passive:true});
 
   // Buttons
-  function restart() {
+  function restart(){
     winOv.classList.remove('show'); loseOv.classList.remove('show');
-    keepPlaying = false; won = false; over = false;
+    keepPlaying=false; won=false; over=false;
     reset();
   }
   btnNew.addEventListener('click', restart);
@@ -511,11 +453,23 @@
   btnNewFromWin.addEventListener('click', restart);
   btnRestart.addEventListener('click', restart);
 
-  // Boot
-  function boot() {
+  // Game boot
+  function reset() {
+    tiles = []; idSeq = 1; setScore(0);
+    tilesEl.innerHTML = ''; setupGridCells();
+    // Ждём раскладки, потом спавним и раскладываем тайлы по фактическим координатам ячеек.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        spawnRandom(true); spawnRandom(true); saveUndo(); layoutTiles();
+      });
+    });
+  }
+  function boot(){
     setupGridCells();
-    computeCell();
-    reset();
+    requestAnimationFrame(() => requestAnimationFrame(reset));
+    // Перераскладка при ориентации/ресайзе — пересчёт позиций по фактическим rect ячеек
+    const ro = new ResizeObserver(() => { requestAnimationFrame(() => requestAnimationFrame(layoutTiles)); });
+    ro.observe(gridEl);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

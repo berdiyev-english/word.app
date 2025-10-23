@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Match-3 (в духе Candy Crush)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Bewords Match‑3 — Mobile Swipe + Звуки</title>
   <style>
     :root{
       --cell: 64px;
@@ -11,9 +11,11 @@
       --bg: #111418;
       --panel: #1b2128;
       --text: #eaf1f8;
+      --muted: #b8c2cc;
       --accent: #66d1ff;
     }
     * { box-sizing: border-box; }
+    html, body{ height:100%; }
     body{
       margin:0;
       min-height:100vh;
@@ -25,18 +27,19 @@
         radial-gradient(1000px 700px at -10% 100%, #0b0f14 0, transparent 60%),
         var(--bg);
       color:var(--text);
-      font:16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: contain;
     }
     .wrap{
       width:min(98vw, 760px);
       display:grid;
-      grid-template-columns: 1fr auto;
-      gap:16px;
+      grid-template-columns: 1fr;
+      gap:14px;
       align-items:start;
-      padding:18px;
+      padding:16px;
     }
     h1{
-      grid-column:1/-1;
       margin:0;
       font-weight:800;
       letter-spacing:.2px;
@@ -46,52 +49,47 @@
       font-size:20px;
     }
     h1 .dot{ width:10px; height:10px; border-radius:50%; background: var(--accent); display:inline-block; box-shadow:0 0 12px #66d1ff80; }
+
     .hud{
-      display:flex;
-      gap:10px;
-      align-items:center;
+      display:flex; gap:8px; align-items:center; flex-wrap:wrap;
       background:var(--panel);
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px solid #ffffff10;
+      padding:10px; border-radius:12px; border:1px solid #ffffff10;
       box-shadow: 0 6px 20px #00000050, inset 0 1px 0 #ffffff10;
     }
     .hud .card{
       background:#0f141a;
-      padding:8px 12px;
-      border-radius:10px;
-      border:1px solid #ffffff0f;
-      min-width:120px;
-      text-align:center;
+      padding:8px 12px; border-radius:10px; border:1px solid #ffffff0f;
+      min-width:96px; text-align:center;
     }
-    .hud .big{ font-size:20px; font-weight:800; }
-    .hud .label{ font-size:12px; color:#b8c2cc; letter-spacing:.2px; }
+    .hud .big{ font-size:18px; font-weight:800; }
+    .hud .label{ font-size:12px; color:var(--muted); letter-spacing:.2px; }
     .btn{
       appearance:none; border:0; background:linear-gradient(180deg, #2e7df7, #1857df);
       color:#fff; font-weight:700; padding:10px 14px; border-radius:10px;
       box-shadow:0 6px 16px #1653d060, inset 0 1px 0 #ffffff66; cursor:pointer;
       transition:.15s transform ease, .15s filter ease;
+      touch-action: manipulation;
+    }
+    .btn.secondary{
+      background:#334155;
+      box-shadow: inset 0 1px 0 #ffffff30;
     }
     .btn:active{ transform: translateY(1px) scale(.99); }
     .hint{
-      color:#b8c2cc; margin:0; align-self:center;
+      color:var(--muted); margin:0;
     }
 
     .board{
-      grid-column:1/-1;
       background:#0b0e12;
       padding:var(--gap);
-      border-radius:14px;
-      border:1px solid #ffffff10;
-      box-shadow:
-        0 10px 30px #00000070,
-        inset 0 2px 0 #ffffff08,
-        inset 0 -2px 0 #00000070;
+      border-radius:14px; border:1px solid #ffffff10;
+      box-shadow: 0 10px 30px #00000070, inset 0 2px 0 #ffffff08, inset 0 -2px 0 #00000070;
       display:grid;
       grid-template-columns: repeat(8, var(--cell));
       gap: var(--gap);
-      touch-action: manipulation;
+      touch-action: none; /* важное — отключаем скролл жестом над полем */
       position:relative;
+      user-select:none;
     }
     .board.shake{ animation:shake .18s ease; }
     @keyframes shake {
@@ -108,13 +106,12 @@
       border-radius:14px;
       display:flex; align-items:center; justify-content:center;
       border:1px solid #00000040;
+      background:#0f141a;
       box-shadow: inset 0 -8px 0 #00000030, inset 0 1px 0 #ffffff20;
-      cursor:pointer;
-      transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
       position:relative;
       overflow:hidden;
+      touch-action:none;
     }
-    .cell:hover{ transform: scale(1.06); }
     .cell.selected{
       outline:3px solid #ffffffcc;
       filter: brightness(1.1) saturate(1.15);
@@ -189,10 +186,28 @@
       to{ transform: scale(1); opacity:1; }
     }
 
+    /* Floating labels (очки/надписи) */
+    .float{
+      position:absolute;
+      left:0; top:0;
+      transform: translate(-50%, -50%);
+      padding:4px 8px; border-radius:8px;
+      background:#00000080; color:#fff; font-weight:800; pointer-events:none;
+      border:1px solid #ffffff30;
+      animation: floatUp .9s ease forwards;
+      z-index:5;
+      font-size:14px;
+    }
+    @keyframes floatUp{
+      from{ opacity:1; transform: translate(-50%, -50%) translateY(0); }
+      to{ opacity:0; transform: translate(-50%, -50%) translateY(-24px); }
+    }
+
     .overlay{
       position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
       background:#00000080; backdrop-filter: blur(2px);
       opacity:0; pointer-events:none; transition:.2s opacity ease;
+      z-index:10;
     }
     .overlay.show{ opacity:1; pointer-events:auto; }
     .modal{
@@ -202,6 +217,13 @@
     }
     .modal h2{ margin:0 0 6px 0; }
     .modal p{ margin:4px 0 16px 0; color:#cbd5e1; }
+
+    /* Адаптив: немного уменьшаем клетки на узких экранах */
+    @media (max-width: 420px){
+      :root{ --cell: 48px; --gap:6px; }
+      h1{ font-size:18px; }
+      .hud .big{ font-size:16px; }
+    }
   </style>
 </head>
 <body>
@@ -220,9 +242,14 @@
         <div class="label">Ходы</div>
         <div class="big" id="moves">30</div>
       </div>
+      <div class="card">
+        <div class="label">Рекорд</div>
+        <div class="big" id="best">0</div>
+      </div>
       <button class="btn" id="restart">Перезапуск</button>
+      <button class="btn secondary" id="toggleSound">Звук/Haptic: Вкл</button>
     </div>
-    <p class="hint">Кликни по фишке, затем по соседней (вверх/вниз/влево/вправо), чтобы поменять их местами.</p>
+    <p class="hint">Свайпни по фишке к соседней (вверх/вниз/влево/вправо), чтобы поменять местами. Клик по соседней тоже работает.</p>
 
     <div class="board" id="board" aria-label="Игровое поле" role="grid"></div>
   </div>
@@ -236,7 +263,7 @@
   </div>
 
   <script>
-    (()=> {
+    ;(()=> {
       const ROWS = 8;
       const COLS = 8;
       const TYPES = 6; // количество цветов
@@ -245,16 +272,64 @@
       const $board = document.getElementById('board');
       const $score = document.getElementById('score');
       const $moves = document.getElementById('moves');
+      const $best  = document.getElementById('best');
       const $restart = document.getElementById('restart');
+      const $toggleSound = document.getElementById('toggleSound');
       const $overlay = document.getElementById('overlay');
       const $finalScore = document.getElementById('finalScore');
       const $playAgain = document.getElementById('playAgain');
 
       let board = [];
       let score = 0;
+      let best = 0;
       let movesLeft = START_MOVES;
       let selected = null; // {r,c}
       let busy = false;
+
+      // gesture state
+      let swipeStart = null; // {r,c, x,y}
+      const SWIPE_THRESHOLD = 20; // px
+
+      // settings
+      let soundOn = true;
+
+      // Audio: WebAudio minimal synth SFX (без файлов)
+      const audio = {
+        ctx: null,
+        ensure(){
+          if(!this.ctx){
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+        },
+        tone({freq=440, dur=0.08, type='sine', gain=0.06}={}){
+          if(!soundOn) return;
+          this.ensure();
+          const t0 = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, t0);
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(gain, t0+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+          osc.connect(g).connect(this.ctx.destination);
+          osc.start(t0);
+          osc.stop(t0+dur+0.02);
+        },
+        chord(freqs=[440,660], dur=0.12){
+          freqs.forEach((f,i)=> this.tone({freq:f, dur:dur-0.02*i, type:'sine', gain:0.05}));
+        },
+        error(){
+          // короткий "buzz"
+          this.tone({freq:180, dur:0.11, type:'square', gain:0.05});
+          setTimeout(()=> this.tone({freq:160, dur:0.11, type:'square', gain:0.05}), 60);
+        },
+        swap(){ this.tone({freq:360, dur:0.07, type:'triangle'}); },
+        match(){ this.chord([660,880], 0.14); },
+        combo(n=2){ this.chord([520,780,1040], 0.16); for(let i=1;i<n;i++) setTimeout(()=>this.tone({freq:520+120*i, dur:0.08}), 70*i); },
+        shuffle(){ this.tone({freq:420, dur:0.06}); setTimeout(()=>this.tone({freq:280, dur:0.08}), 60); },
+        click(){ this.tone({freq:520, dur:0.05}); },
+      };
 
       // Utils
       const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
@@ -262,9 +337,20 @@
       const isNeighbor = (a,b)=> a && b && (Math.abs(a.r-b.r)+Math.abs(a.c-b.c)===1);
       const randType = ()=> Math.floor(Math.random()*TYPES);
 
+      // Save/load best score
+      function loadBest(){
+        try{
+          const v = localStorage.getItem('bewords-best');
+          if(v) best = +v || 0;
+        }catch{}
+      }
+      function saveBest(){
+        try{ localStorage.setItem('bewords-best', String(best)); }catch{}
+      }
+
       // Board generation
       function newBoardRandom(){
-        board = Array.from({length:ROWS}, _ => Array.from({length:COLS}, _ => randType()));
+        return Array.from({length:ROWS}, _ => Array.from({length:COLS}, _ => randType()));
       }
       function findMatches(){
         const set = new Set();
@@ -336,17 +422,15 @@
         return false;
       }
       function ensureStartableBoard(){
-        // до тех пор, пока на поле есть автосовпадения или нет ходов — генерируем заново
         let safety = 0;
         do {
-          newBoardRandom();
+          board = newBoardRandom();
           safety++;
           if(safety>500) break;
         } while(findMatches().size>0 || !hasAvailableMoves());
       }
 
       function collapseAndFill(){
-        // Опускаем фишки вниз и генерим новые сверху
         const newCells = [];
         for(let c=0;c<COLS;c++){
           let write = ROWS - 1;
@@ -370,12 +454,12 @@
         $board.innerHTML = "";
         for(let r=0;r<ROWS;r++){
           for(let c=0;c<COLS;c++){
-            const wrapper = document.createElement('button');
+            const wrapper = document.createElement('div');
             wrapper.className = 'cell';
-            wrapper.type = 'button';
             wrapper.setAttribute('role','gridcell');
             wrapper.dataset.row = r;
             wrapper.dataset.col = c;
+
             const val = board[r][c];
             if(val === -1){
               wrapper.classList.add('empty');
@@ -385,16 +469,24 @@
               candy.className = 'candy';
               wrapper.appendChild(candy);
             }
+
             if(selected && selected.r===r && selected.c===c){
               wrapper.classList.add('selected');
             }
-            wrapper.addEventListener('click', onCellClick, {passive:true});
+
+            wrapper.addEventListener('pointerdown', onPointerDown, {passive:false});
+            wrapper.addEventListener('pointermove', onPointerMove, {passive:false});
+            wrapper.addEventListener('pointerup', onPointerUp, {passive:false});
+            wrapper.addEventListener('click', onCellClick, {passive:true}); // запасной способ — клик по соседней
             $board.appendChild(wrapper);
           }
         }
-        $score.textContent = String(score);
-        $moves.textContent = String(movesLeft);
+        updateHud();
       }
+      function queryCell(r,c){
+        return $board.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+      }
+
       function addCrushAnimation(matchSet){
         for(const key of matchSet){
           const [r,c] = key.split(',').map(Number);
@@ -409,8 +501,35 @@
           el.classList.add('new');
         }
       }
-      function queryCell(r,c){
-        return $board.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+
+      // Floating labels
+      function floatLabel(text, cells){
+        if(!cells || cells.length===0) return;
+        // средняя позиция
+        const avg = cells.reduce((a,p)=>({x:a.x+p.c,y:a.y+p.r}),{x:0,y:0});
+        const cx = avg.x / cells.length;
+        const cy = avg.y / cells.length;
+
+        const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 64;
+        const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 6;
+
+        const x = $board.offsetLeft + (cellSize+gap)*cx + cellSize/2 + parseFloat(getComputedStyle($board).paddingLeft||0);
+        const y = $board.offsetTop  + (cellSize+gap)*cy + cellSize/2 + parseFloat(getComputedStyle($board).paddingTop||0);
+
+        const span = document.createElement('span');
+        span.className = 'float';
+        span.style.left = `${x}px`;
+        span.style.top  = `${y}px`;
+        span.textContent = text;
+        document.body.appendChild(span);
+        setTimeout(()=> span.remove(), 900);
+      }
+
+      // HUD
+      function updateHud(){
+        $score.textContent = String(score);
+        $moves.textContent = String(movesLeft);
+        $best.textContent = String(best);
       }
 
       // Game flow
@@ -421,10 +540,30 @@
           if(matches.size === 0) break;
 
           chain++;
-          const points = matches.size * 10 * chain; // небольшой бонус за цепочку
+          const list = Array.from(matches).map(k => {
+            const [r,c] = k.split(',').map(Number);
+            return {r,c};
+          });
+
+          const points = matches.size * 10 * chain; // бонус за цепочку
           score += points;
+          if(score > best){ best = score; saveBest(); }
           addCrushAnimation(matches);
           updateHud();
+
+          // звуки / эффекты
+          vibrate(10);
+          audio.match();
+          if(matches.size >= 4){
+            floatLabel('Молодец!', list);
+            // небольшая дополнительная «нотка»
+            audio.tone({freq:900, dur:0.08});
+          }
+          if(chain >= 2){
+            floatLabel(`Комбо x${chain}!`, list);
+            audio.combo(Math.min(chain, 4));
+          }
+          floatLabel(`+${points}`, list);
 
           await sleep(240);
           // очистка
@@ -439,17 +578,14 @@
         }
       }
 
-      function updateHud(){
-        $score.textContent = String(score);
-        $moves.textContent = String(movesLeft);
-      }
-
       async function trySwap(a,b){
         if(busy) return;
         busy = true;
         swapInBoard(a,b);
         renderBoard();
-        await sleep(120);
+        audio.swap();
+
+        await sleep(110);
 
         const matches = findMatches();
         if(matches.size > 0){
@@ -457,7 +593,6 @@
           movesLeft = Math.max(0, movesLeft - 1);
           updateHud();
           await resolveCascade();
-          // Проверка конца игры и отсутствия ходов
           if(movesLeft <= 0){
             endGame();
           } else if(!hasAvailableMoves()){
@@ -469,6 +604,8 @@
           renderBoard();
           $board.classList.add('shake');
           setTimeout(()=> $board.classList.remove('shake'), 200);
+          audio.error();
+          vibrate(30);
         }
         selected = null;
         renderBoard();
@@ -476,7 +613,7 @@
       }
 
       async function shuffleBoardAnimated(){
-        // безопасное перемешивание: без мгновенных совпадений и с доступными ходами
+        // безопасное перемешивание
         let tries = 0;
         do {
           const pool = [];
@@ -495,37 +632,11 @@
           }
         } while(findMatches().size>0 || !hasAvailableMoves());
         renderBoard();
-        // легкая подсветка "новизны"
         const all = [];
         for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) all.push({r,c});
         addNewAnimation(all);
+        audio.shuffle();
         await sleep(160);
-      }
-
-      // Events
-      function onCellClick(e){
-        if(busy) return;
-        const el = e.currentTarget;
-        const r = +el.dataset.row;
-        const c = +el.dataset.col;
-        const pos = {r,c};
-
-        if(!selected){
-          selected = pos;
-          renderBoard();
-          return;
-        }
-        if(selected.r === r && selected.c === c){
-          selected = null;
-          renderBoard();
-          return;
-        }
-        if(isNeighbor(selected, pos)){
-          trySwap(selected, pos);
-        } else {
-          selected = pos;
-          renderBoard();
-        }
       }
 
       function endGame(){
@@ -542,15 +653,103 @@
         renderBoard();
       }
 
-      // Init
-      $restart.addEventListener('click', resetGame);
-      $playAgain.addEventListener('click', ()=> {
-        $overlay.classList.remove('show');
-        resetGame();
+      // Gestures: свайп к соседней клетке
+      function getRCFromTarget(t){
+        if(!t) return null;
+        const r = +t.dataset.row;
+        const c = +t.dataset.col;
+        if(Number.isFinite(r) && Number.isFinite(c)) return {r,c};
+        return null;
+      }
+      function onPointerDown(e){
+        if(busy) return;
+        e.preventDefault();
+        const pos = getRCFromTarget(e.currentTarget);
+        if(!pos) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        // начинаем отслеживать
+        swipeStart = {
+          r: pos.r, c: pos.c,
+          x: e.clientX, y: e.clientY
+        };
+        selected = pos;
+        renderBoard();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      }
+      function onPointerMove(e){
+        if(busy || !swipeStart) return;
+        e.preventDefault();
+        const dx = e.clientX - swipeStart.x;
+        const dy = e.clientY - swipeStart.y;
+        const adx = Math.abs(dx), ady = Math.abs(dy);
+        if(Math.max(adx, ady) < SWIPE_THRESHOLD) return;
+        // определяем ближайшего соседа по направлению
+        let to = null;
+        if(adx > ady){
+          to = { r: swipeStart.r, c: swipeStart.c + (dx>0?1:-1) };
+        } else {
+          to = { r: swipeStart.r + (dy>0?1:-1), c: swipeStart.c };
+        }
+        if(to && inBounds(to.r, to.c)){
+          // сразу делаем попытку свапа и сбрасываем
+          trySwap({r: swipeStart.r, c: swipeStart.c}, to);
+          swipeStart = null;
+        }
+      }
+      function onPointerUp(e){
+        if(busy) return;
+        // если пользователь лишь ткнул — ничего не делаем, клик обработается onCellClick как запасной вариант
+        swipeStart = null;
+      }
+
+      // Запасной способ: «выбор + клик по соседней»
+      function onCellClick(e){
+        if(busy) return;
+        const el = e.currentTarget;
+        const r = +el.dataset.row;
+        const c = +el.dataset.col;
+        const pos = {r,c};
+
+        if(!selected){
+          selected = pos;
+          renderBoard();
+          audio.click();
+          return;
+        }
+        if(selected.r === r && selected.c === c){
+          selected = null;
+          renderBoard();
+          return;
+        }
+        if(isNeighbor(selected, pos)){
+          trySwap(selected, pos);
+        } else {
+          selected = pos;
+          renderBoard();
+        }
+      }
+
+      function vibrate(ms){
+        if(!soundOn) return;
+        if(navigator.vibrate) navigator.vibrate(ms);
+      }
+
+      // Events
+      $restart.addEventListener('click', ()=>{ audio.click(); resetGame(); });
+      $playAgain.addEventListener('click', ()=> { audio.click(); $overlay.classList.remove('show'); resetGame(); });
+      $toggleSound.addEventListener('click', ()=>{
+        soundOn = !soundOn;
+        $toggleSound.textContent = `Звук/Haptic: ${soundOn ? 'Вкл' : 'Выкл'}`;
+        audio.click();
       });
 
-      // First start
+      // Init
+      loadBest();
+      updateHud();
       resetGame();
+
+      // Resize observer: центрирование floating относительно борда при скролле
+      window.addEventListener('resize', ()=>{ /* no-op, CSS адаптив */ });
     })();
   </script>
 </body>

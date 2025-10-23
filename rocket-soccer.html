@@ -32,7 +32,7 @@
       font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: contain;
-      overflow-x: hidden; /* важно — чтобы не было горизонтального скролла */
+      overflow-x: hidden; /* исключаем горизонтальный скролл */
     }
     .wrap{
       width:100vw;
@@ -89,7 +89,7 @@
       color:var(--muted); margin:0;
     }
 
-    /* АДАПТАЦИЯ: доска теперь 100% ширины, колонки — 1fr, клетки квадратные через aspect-ratio */
+    /* Доска 100% ширины, 8 колонок-1fr, клетки квадратные через aspect-ratio */
     .board{
       width:100%;
       background:#0b0e12;
@@ -114,7 +114,7 @@
 
     .cell{
       width:100%;
-      aspect-ratio: 1 / 1; /* квадрат — автоматически под ширину колонки */
+      aspect-ratio: 1 / 1;
       border-radius:14px;
       display:flex; align-items:center; justify-content:center;
       border:1px solid #00000040;
@@ -198,7 +198,7 @@
       to{ transform: scale(1); opacity:1; }
     }
 
-    /* Floating labels (очки/надписи) */
+    /* Floating labels */
     .float{
       position:absolute;
       left:0; top:0;
@@ -230,7 +230,7 @@
     .modal h2{ margin:0 0 6px 0; }
     .modal p{ margin:4px 0 16px 0; color:#cbd5e1; }
 
-    /* На очень узких экранах уменьшаем шрифты/отступы */
+    /* Узкие экраны — чуть меньше шрифты/отступы */
     @media (max-width: 380px){
       h1{ font-size:18px; }
       .hud .big{ font-size:16px; }
@@ -305,7 +305,7 @@
       // settings
       let soundOn = true;
 
-      // Audio SFX на WebAudio (без файлов)
+      // Audio SFX на WebAudio (без файлов) + корректная разблокировка на первом жесте
       const audio = {
         ctx: null,
         ensure(){
@@ -313,8 +313,16 @@
             this.ctx = new (window.AudioContext || window.webkitAudioContext)();
           }
         },
-        tone({freq=440, dur=0.08, type='sine', gain=0.06}={}){
-          if(!soundOn) return;
+        async unlock(){
+          this.ensure();
+          try{
+            if(this.ctx.state === 'suspended'){
+              await this.ctx.resume();
+            }
+          }catch{}
+        },
+        playRaw({freq=440, dur=0.08, type='sine', gain=0.06}={}){
+          // проигрывает всегда (для звука-подтверждения при включении), без проверки soundOn
           this.ensure();
           const t0 = this.ctx.currentTime;
           const osc = this.ctx.createOscillator();
@@ -328,6 +336,10 @@
           osc.start(t0);
           osc.stop(t0+dur+0.02);
         },
+        tone({freq=440, dur=0.08, type='sine', gain=0.06}={}){
+          if(!soundOn) return;
+          this.playRaw({freq,dur,type,gain});
+        },
         chord(freqs=[440,660], dur=0.12){
           freqs.forEach((f,i)=> this.tone({freq:f, dur:dur-0.02*i, type:'sine', gain:0.05}));
         },
@@ -340,7 +352,14 @@
         combo(n=2){ this.chord([520,780,1040], 0.16); for(let i=1;i<n;i++) setTimeout(()=>this.tone({freq:520+120*i, dur:0.08}), 70*i); },
         shuffle(){ this.tone({freq:420, dur:0.06}); setTimeout(()=>this.tone({freq:280, dur:0.08}), 60); },
         click(){ this.tone({freq:520, dur:0.05}); },
+        clickForce(){ this.playRaw({freq:520, dur:0.05}); },
       };
+
+      // Глобальная разблокировка аудио по первому жесту пользователя (исправляет необходимость «жать два раза»)
+      const unlockOnce = async () => { await audio.unlock(); };
+      window.addEventListener('pointerdown', unlockOnce, { once:true, passive:true });
+      window.addEventListener('touchstart', unlockOnce, { once:true, passive:true });
+      window.addEventListener('click', unlockOnce, { once:true, passive:true });
 
       // Utils
       const sleep = (ms)=> new Promise(r=>setTimeout(r, ms));
@@ -512,7 +531,7 @@
         }
       }
 
-      // Floating labels — вычисляем координаты из реальной ширины доски
+      // Floating labels
       function floatLabel(text, cells){
         if(!cells || cells.length===0) return;
 
@@ -526,7 +545,6 @@
         const padL = parseFloat(cs.paddingLeft) || 0;
         const padT = parseFloat(cs.paddingTop) || 0;
 
-        // реальная ширина сетки внутри padding
         const innerW = boardRect.width - padL - (parseFloat(cs.paddingRight) || 0);
         const cellSize = (innerW - gap*(COLS-1)) / COLS;
 
@@ -547,6 +565,7 @@
         $score.textContent = String(score);
         $moves.textContent = String(movesLeft);
         $best.textContent = String(best);
+        $toggleSound.textContent = `Звук/Haptic: ${soundOn ? 'Вкл' : 'Выкл'}`;
       }
 
       // Game flow
@@ -568,7 +587,7 @@
           addCrushAnimation(matches);
           updateHud();
 
-          // звуки / эффекты
+          // эффекты
           vibrate(10);
           audio.match();
           if(matches.size >= 4){
@@ -582,7 +601,6 @@
           floatLabel(`+${points}`, list);
 
           await sleep(240);
-          // очистка
           for(const key of matches){
             const [r,c] = key.split(',').map(Number);
             board[r][c] = -1;
@@ -689,7 +707,7 @@
         const dx = e.clientX - swipeStart.x;
         const dy = e.clientY - swipeStart.y;
         const adx = Math.abs(dx), ady = Math.abs(dy);
-        if(Math.max(adx, ady) < SWIPE_THRESHOLD) return;
+        if(Math.max(adx, ady) < 20) return;
         let to = null;
         if(adx > ady){
           to = { r: swipeStart.r, c: swipeStart.c + (dx>0?1:-1) };
@@ -701,7 +719,7 @@
           swipeStart = null;
         }
       }
-      function onPointerUp(e){
+      function onPointerUp(){
         if(busy) return;
         swipeStart = null;
       }
@@ -741,18 +759,27 @@
       // Events
       $restart.addEventListener('click', ()=>{ audio.click(); resetGame(); });
       $playAgain.addEventListener('click', ()=> { audio.click(); $overlay.classList.remove('show'); resetGame(); });
-      $toggleSound.addEventListener('click', ()=>{
-        soundOn = !soundOn;
-        $toggleSound.textContent = `Звук/Haptic: ${soundOn ? 'Вкл' : 'Выкл'}`;
-        audio.click();
+
+      // ВАЖНО: Починили поведение кнопки «Звук/Haptic»
+      // - Сначала гарантированно разблокируем аудио контекст
+      // - Если включаем звук — проигрываем клик-подтверждение (даже если только что был выключен)
+      $toggleSound.addEventListener('click', async ()=>{
+        await audio.unlock();
+        if(!soundOn){
+          soundOn = true;
+          updateHud();
+          audio.clickForce(); // слышно сразу при включении
+        } else {
+          soundOn = false;
+          updateHud();
+          // без звука при выключении
+        }
       });
 
       // Init
       loadBest();
-      updateHud();
+      updateHud(); // выставляем корректную подпись кнопки при старте
       resetGame();
-
-      // Ничего не нужно при resize — сетка резиновая 1fr + aspect-ratio
     })();
   </script>
 </body>
